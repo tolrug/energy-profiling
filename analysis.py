@@ -1016,10 +1016,12 @@ def get_data_in_period(client, start_date, end_date, device, sensor):
     
     while (current_date < end_date):
         q = """SELECT * FROM "iotawatt" WHERE "device" = {} AND "sensor" = {} AND "time" >= {} AND "time" <= {}""".format(device, sensor, current_date, end_date)
-#         print(q)
+        print(q)
         data = pd.DataFrame(client.query(q, chunked=True))
         dataF = dataF.append(data, ignore_index=True)
         most_recent_time = get_most_recent_time(dataF)
+        if (current_date == most_recent_time):
+            break
         current_date = most_recent_time
     
     return dataF
@@ -1447,9 +1449,9 @@ def get_sleep_disturbances(data):
 # In[ ]:
 
 
-# q = """SELECT * FROM "iotawatt" WHERE "device" = 'uq49' AND "sensor" = 'Lights1' AND "time" >= '2021-03-01T00:00:00Z' AND "time" <= '2021-03-31T23:59:50Z'"""
+# q = """SELECT * FROM "iotawatt" WHERE "device" = 'uq68' AND "sensor" = 'Powerpoints1' AND "time" >= '2020-09-01T00:00:00Z' AND "time" <= '2020-10-1T00:00:00Z'"""
 
-# uq49_light_data = pd.DataFrame(client2.query(q, chunked=True))
+# test_data = pd.DataFrame(client2.query(q, chunked=True))
 # uq49_light_data
 
 
@@ -1824,11 +1826,13 @@ def stress_anxiety(sleep_disturbances, work_durations, sleep_durations, microwav
 
 
 def home_risk(stove, hotwater, ages, consumptions, ovens):
+    print()
     print("Stove?: \t\n", stove)
     print("Hotwater?: \t\n", hotwater)
     print("Ages: \t\t\n", ages)
     print("Consumption: \t\n", consumptions)
     print("Oven: \t\t\n", ovens)
+    print()
 
     ranks = [0] * len(stove)
     for i, val in enumerate(stove.values()):
@@ -1857,7 +1861,8 @@ def home_risk(stove, hotwater, ages, consumptions, ovens):
         if (rank < 0):
             rank = 0
     
-    print("Home Risk Ranks: \t\t\t", ranks)
+    print("Home Risk Ranks: \t\t\t\n", ranks)
+    print()
     return ranks
 
 
@@ -2120,7 +2125,7 @@ def get_consumption(data):
     total = 0
     for val in data:
         total += val
-    return int(total / len(data))
+    return int((total / len(data)) * (60*60*24/10))
 
 
 # In[45]:
@@ -2290,7 +2295,7 @@ def get_all_ovens(data):
 
 
 def process_home_risk():
-    months = ['2020-07-01', '2020-08-01', '2020-09-01', '2020-10-01', '2020-11-01', '2020-12-01', '2020-12-31']
+    months = ['2020-12-01', '2021-01-01'] #, '2020-09-01', '2020-10-01', '2020-11-01', '2020-12-01', '2020-12-31']
     
     final_result = {}
     
@@ -2299,12 +2304,15 @@ def process_home_risk():
         
         # 1. Gas Stove?
         print("1. Calculating stove infrastructure")
+        pp.pprint(stove)
         
         # 2. Gas Hotwater?
         print("2. Calculating hotwater infrastructure")
+        pp.pprint(hotwater)
         
         # 3. Age
         print("3. Assessing age")
+        pp.pprint(ages)
         
         
         # Consumption Data
@@ -2320,6 +2328,7 @@ def process_home_risk():
         # 6. Occupancy
         print("6. Calculating occupancy")
         consumptions = get_all_consumptions(consumption_processed)
+        pp.pprint(consumptions)
         
         consumption_normalised = []
         for val in consumptions:
@@ -2345,6 +2354,7 @@ def process_home_risk():
         # 7. Oven on for > 2 hours?
         print("7. Calculating prolonged oven usages")
         ovens = get_all_ovens(oven_processed)
+        pp.pprint(ovens)
         
         oven_normalised = []
         for val in ovens:
@@ -2359,20 +2369,25 @@ def process_home_risk():
         home_risk_all = home_risk(stove, hotwater, ages, consumption_normalised, oven_normalised)
         
         result = normalise_and_rank(home_risk_all, list(stove.keys()))
+
+        print("--- Final result ---") 
+        pp.pprint(result)
         
-        for key in list(result.keys()):
-            try:
-                final_result[key] = final_result[key] + result[key]
-            except KeyError:
-                final_result[key] = result[key]
-        print("Current result: ", final_result)
-        print()
+    #     for key in list(result.keys()):
+    #         try:
+    #             final_result[key] = final_result[key] + result[key]
+    #         except KeyError:
+    #             final_result[key] = result[key]
+    #     # print("Current result: ", final_result)
+    #     print()
     
-    for key in list(final_result.keys()):
-        final_result[key] = final_result[key] // len(months-1)
+    # for key in list(final_result.keys()):
+    #     final_result[key] = final_result[key] // len(months)-1
     
-    print("--- Final result ---\n", final_result)        
-    return final_result
+    # print("--- Final result ---") 
+    # pp.pprint(final_result)       
+    # return final_result
+    return result
 
 
 # In[ ]:
@@ -2605,12 +2620,26 @@ if __name__ == '__main__':
     res2 = process_home_risk()
 
     end = datetime.datetime.now()
+
+    print()
     print("Start: ", start)
     print("End: ", end)
 
-    res2
+    print("Time taken: {} minutes".format(end.time().minute - start.time().minute))
+
+    # q = """SELECT * FROM "iotawatt" WHERE "device" = 'uq68' AND "sensor" = 'Powerpoints1' AND "time" >= '2020-09-25T00:00:00Z' AND "time" <= '2020-10-01T00:00:00Z'"""
+
+    # test_data = pd.DataFrame(client2.query(q, chunked=True))
+    # print("DATA: ", test_data[0][0])
+
+
+    # w                   w
+    # /                   /
+    # 10sec   *8640     86400sec               
 
 
 
 
 
+
+# %%
