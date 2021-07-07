@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import pprint as pp
+import gc
 pd.options.mode.chained_assignment = None  # default='warn'
 # import ipdb; ipdb.set_trace()
 pd.set_option('display.max_rows', 100)
@@ -966,7 +967,8 @@ oven_circuits = {                     "uq10": "Oven",
 
 
 # Change this to be the circuit with the most kitchen-like activity (not neccessarily the fridge's circuit)
-power_circuits = {                     "uq10": "Powerpoints1",
+power_circuits = {                     
+                    "uq10": "Powerpoints1",
                     "uq12": "Powerpoints2",
                     "uq23": "Powerpoints1",
                     "uq24": "Powerpoints2",
@@ -992,12 +994,27 @@ power_circuits = {                     "uq10": "Powerpoints1",
 # In[18]:
 
 
-stove_circuits = {                   "uq10": "Oven",
-                  "uq12": "Stove",
-                  "uq23": "Stove",
-                  "uq24": "OvenHob",
-                  "uq26": "Stove",
-                  "hfs01a": "Hotplate"
+stove_circuits = {  
+                    "uq10": "Oven",
+                    "uq12": "Stove",
+                    "uq23": "Stove",
+                    "uq24": "OvenHob",
+                    "uq26": "Stove",
+                    "uq33": "Stove",
+                    "uq37": "Hotplate",
+                    "uq45": "Oven",
+                    "uq48": "Hotplates",
+                    "uq49": "Hob",
+                    "uq56": "Oven",
+                    "uq57": "Oven",
+                    "uq61": "Oven",
+                    "uq67": "Stove", 
+                    "uq68": "Hotplate",
+                    "uq75": "Hob",
+                    "uq85": "HotPlateOven",
+                    "uq88": "Oven",
+                    "uq92": "Stove",
+                    "hfs01a": "Hotplate"
                  }
 
 
@@ -1212,26 +1229,26 @@ def normalise(x, x_min, x_max):
 
 
 light_circuits = {
-                "uq10": "Lights1",
-                "uq12": "Lights12",
-                "uq23": "Lights1",
-                "uq24": "Lights1",
-                "uq26": "Light",
-                "uq33": "Lights1",
-                "uq37": "Lights12",
-                "uq45": "Lights",
-                "uq48": "Lights1",
-                "uq49": "Lights1",
-                "uq56": "Lights1",
-                "uq57": "Lights2",
-                "uq61": "Lights1",
-                "uq67": "Lights1", 
-                "uq68": "Lights",
-                "uq75": "Lights",
-                "uq85": "Lights3",
-                "uq88": "Lights1",
-                "uq92": "Lights1",
-                "hfs01a": "Lights2",
+                    "uq10": "Lights1",
+                    "uq12": "Lights12",
+                    "uq23": "Lights1",
+                    "uq24": "Lights1",
+                    "uq26": "Light",
+                    "uq33": "Lights1",
+                    "uq37": "Lights12",
+                    "uq45": "Lights",
+                    "uq48": "Lights1",
+                    "uq49": "Lights1",
+                    "uq56": "Lights1",
+                    "uq57": "Lights2",
+                    "uq61": "Lights1",
+                    "uq67": "Lights1", 
+                    "uq68": "Lights",
+                    "uq75": "Lights",
+                    "uq85": "Lights3",
+                    "uq88": "Lights1",
+                    "uq92": "Lights1",
+                    "hfs01a": "Lights2",
                 }
 
 # light_circuits = {
@@ -1780,7 +1797,7 @@ def stress_anxiety(sleep_disturbances, work_durations, sleep_durations, microwav
     print("Ages: \t\t", ages)
     print("Consumption: \t", consumptions)
     
-    ranks = [0] * 6
+    ranks = [0] * len(ages)
     for i, sleep_disturbance in enumerate(sleep_disturbances):
         if sleep_disturbance != -2: 
             if (sleep_disturbance > 0.6):
@@ -1819,6 +1836,7 @@ def stress_anxiety(sleep_disturbances, work_durations, sleep_durations, microwav
             rank = 0
     
     print("Stress/Anxiety Ranks: \t\t\t", ranks)
+    print()
     return ranks
 
 
@@ -1951,7 +1969,7 @@ def normalise_and_rank(ranks, names):
 
 
 def process_stress_anxiety():
-    months = ['2020-10-01', '2020-11-01', '2020-12-01']     #, '2021-01-01', '2021-02-01', '2021-03-01']
+    months = ['2020-11-01', '2020-12-01', '2020-12-31']
     
     final_result = {}
     
@@ -1978,8 +1996,11 @@ def process_stress_anxiety():
         
         
         # 1. Microwave vs Stovetop Use
+        # TODO: Stove circuits currently uses a mixture of hotplate and oven circuits. Need to discuss this.
         print("1. Calculating microwave vs stovetop use")
         microwave_peaks, stove_peaks = microwave_stove_peaks(microwave_processed, stove_processed)
+        pp.pprint(microwave_peaks)
+        pp.pprint(stove_peaks)
         
         microwave_normalised = []
         for val in microwave_peaks:
@@ -2004,6 +2025,7 @@ def process_stress_anxiety():
         # 2. Sleep Disturbance
         print("2. Calculating sleep disturbance")
         sleep_disturbances = get_sleep_disturbances(light_processed)
+        pp.pprint(sleep_disturbances)
         
         sleep_disturbances_normalised = []
         for val in sleep_disturbances:
@@ -2018,6 +2040,7 @@ def process_stress_anxiety():
         work_schedules = get_work_schedules(light_processed)
         
         work_durations = get_work_durations(work_schedules)
+        pp.pprint(work_durations)
         
         work_durations_normalised = []
         for val in work_durations:
@@ -2032,6 +2055,7 @@ def process_stress_anxiety():
         sleep_schedules = get_all_circadian_rythm(light_processed)
 
         sleep_durations = get_sleep_durations(sleep_schedules)
+        pp.pprint(sleep_durations)
         
         sleep_durations_normalised = []
         for val in sleep_durations:
@@ -2044,6 +2068,7 @@ def process_stress_anxiety():
         print("5. Assessing age")
         
         # Consumption Data
+        # TODO: Use Consumption circuit instead of power circuit?
         print("Getting consumption data")
         consumption_dataframes = []
         for i, home in enumerate(power_circuits):
@@ -2056,6 +2081,7 @@ def process_stress_anxiety():
         # 6. Occupancy
         print("6. Calculating occupancy")
         consumptions = get_all_consumptions(consumption_processed)
+        pp.pprint(consumptions)
         
         consumption_normalised = []
         for val in consumptions:
@@ -2077,9 +2103,20 @@ def process_stress_anxiety():
                 final_result[key] = result[key]
         print("Current result: ", final_result)
         print()
+
+        del microwave_dataframes
+        del stove_dataframes
+        del microwave_processed
+        del stove_processed
+        del light_dataframes
+        del light_processed
+        del consumption_dataframes
+        del consumption_processed
+        gc.collect()
+
     
     for key in list(final_result.keys()):
-        final_result[key] = final_result[key] // 2
+        final_result[key] = final_result[key] // (len(months)-1)
     
     print("--- Final result ---\n", final_result)        
     return final_result
@@ -2382,7 +2419,7 @@ def process_home_risk():
     #     print()
     
     # for key in list(final_result.keys()):
-    #     final_result[key] = final_result[key] // len(months)-1
+    #     final_result[key] = final_result[key] // (len(months)-1)
     
     # print("--- Final result ---") 
     # pp.pprint(final_result)       
@@ -2617,7 +2654,7 @@ def process_outlier_check():
 if __name__ == '__main__':
     start = datetime.datetime.now()
 
-    res2 = process_home_risk()
+    res = process_stress_anxiety()
 
     end = datetime.datetime.now()
 
