@@ -1979,7 +1979,11 @@ def normalise_and_rank(ranks, names):
         normalised = normalise(ranks[i], min(ranks), max(ranks))
         ranked = rank(normalised)
         values[names[i]] = ranked
-    pp.pprint("Values: ", values.values())
+    try:
+        pp.pprint(list(values.values()))
+    except AttributeError:
+        print('here')
+        print(list(values.values()))
     return values
 
 
@@ -2985,7 +2989,7 @@ if __name__ == '__main__':
 
 
 
-    process_heat_sensitivity()
+    process_cold_sensitivity()
 
 
 
