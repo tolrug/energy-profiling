@@ -6,6 +6,7 @@ import datetime
 import math
 from typing import List, Tuple
 import numpy as np
+from numpy.lib.function_base import corrcoef
 import pandas as pd
 import matplotlib.pyplot as plt
 import pprint as pp
@@ -13,6 +14,9 @@ import gc
 pd.options.mode.chained_assignment = None  # default='warn'
 # import ipdb; ipdb.set_trace()
 pd.set_option('display.max_rows', 100)
+from numpy.random import randn
+from numpy.random import seed
+from scipy.stats import pearsonr
 
 # df = pd.read_csv("data/steve-mar-2021.csv", sep=';', index_col=0, dtype=object)
 
@@ -528,12 +532,14 @@ def get_daily_usage(arr: List[Tuple[str,int]]) -> pd.Series:
 # In[ ]:
 
 
-def load_bom_data(filename: str, isHigh: bool) -> List[int]:
-    data = pd.read_csv(filename, sep=',', index_col=0, dtype=object)
-    data_col = data.iloc[:, 1] if isHigh else data.iloc[:, 0]
-    temps = [int(float(data_col.iloc[i])) for i in range(len(data_col))]
-    
-    return temps
+def load_bom_data(filename: str) -> List[int]:
+    all_data = pd.read_csv(filename, sep=',', header=None, dtype=object)
+    data = []
+    for i in range(6):
+        month = all_data.iloc[:, i]
+        month = month.dropna()
+        data.append([int(float(month.iloc[j])) if month.iloc[j] != "NaN" else True for j in range(len(month))])
+    return data
 
 
 # In[ ]:
@@ -1035,9 +1041,11 @@ def get_data_in_period(client, start_date, end_date, device, sensor):
         q = """SELECT * FROM "iotawatt" WHERE "device" = {} AND "sensor" = {} AND "time" >= {} AND "time" <= {}""".format(device, sensor, current_date, end_date)
         print(q)
         data = pd.DataFrame(client.query(q, chunked=True))
+        if (data.empty):
+            return dataF
         dataF = dataF.append(data, ignore_index=True)
         most_recent_time = get_most_recent_time(dataF)
-        if (current_date == most_recent_time):
+        if (current_date == most_recent_time or most_recent_time == -1):
             break
         current_date = most_recent_time
     
@@ -1050,6 +1058,8 @@ def get_data_in_period(client, start_date, end_date, device, sensor):
 def get_most_recent_time(df):
     last_idx = df.index[-1]
     last_arr = df[0][last_idx]
+    if (last_arr is None):
+        return -1
     last_time = last_arr[-1].get("time")
     return "'{}'".format(last_time)
 
@@ -1184,7 +1194,10 @@ def microwave_stove_peaks(processed, stove_processed):
 
 
 def normalise(x, x_min, x_max):
-    return round(2*((x-x_min)/(x_max-x_min))-1,2)
+    try:
+        return round(2*((x-x_min)/(x_max-x_min))-1,2)
+    except ZeroDivisionError:
+        return 0
 
 
 # In[ ]:
@@ -1226,6 +1239,29 @@ def normalise(x, x_min, x_max):
 
 
 # In[182]:
+
+aircon_circuits = {
+                    "uq10": "none",
+                    "uq12": "Aircon1",
+                    "uq23": "none",
+                    "uq24": "Aircon2",
+                    "uq26": "Aircon",
+                    "uq33": "Aircon2",
+                    "uq37": "Aircon1",
+                    "uq45": "Aircon",
+                    "uq48": "AirconShed",
+                    "uq49": "Aircon1",
+                    "uq56": "Aircon",
+                    "uq57": "Aircon",
+                    "uq61": "Aircon2",
+                    "uq67": "Aircon", 
+                    "uq68": "Aircon",
+                    "uq75": "Aircon1",
+                    "uq85": "Aircon1OP",
+                    "uq88": "Aircon1",
+                    "uq92": "Lights1",
+                    "hfs01a": "Aircon1"
+                }
 
 
 light_circuits = {
@@ -1943,7 +1979,7 @@ def normalise_and_rank(ranks, names):
         normalised = normalise(ranks[i], min(ranks), max(ranks))
         ranked = rank(normalised)
         values[names[i]] = ranked
-    print("Values: ", values)
+    pp.pprint("Values: ", values.values())
     return values
 
 
@@ -2451,38 +2487,15 @@ def process_home_risk():
 
 
 # Prostate/kidney disease
-# Check age, and check sleep disturbances
-def prostate_kidney_disease(ages, sleep_disturbances):
-    print("Ages: \t\t\t", ages)
-    print("Sleep Disturbances: \t", sleep_disturbances)
+def health_insurance(ages, microwave, stovetop, sleep_disturbances, sleep_durations):
     
-    # Change this to represent the number of nights in the query period
-    nights_in_period = 30
-
-    ranks = [0] * len(ages)
-    for i, age in enumerate(ages.values()):
-        if age >= 60:
-            ranks[i] += 2
-        elif age >= 50:
-            ranks[i] += 1
-        else:
-            ranks[i] = -2
-    for i, sleep_disturbance in enumerate(sleep_disturbances):
-        if sleep_disturbance != -2 and ranks[i] != -2:
-            # Gets the average number of sleep disturbances per night
-            print("Sleep disturbances per night: ", sleep_disturbance / nights_in_period)
-            if (sleep_disturbance / nights_in_period > 3):
-                ranks[i] += 2
-            elif (sleep_disturbance / nights_in_period > 2):
-                ranks[i] += 1
-    
-    print("Prostate/Kidney Disease Ranks: \t\t\t", ranks)
-    return ranks
+    c
     
 
 
 # In[ ]:
 
+    print("Prostate/Kidney Disease Ranks: \t\t\t", ranks)
 
 
 
@@ -2490,8 +2503,8 @@ def prostate_kidney_disease(ages, sleep_disturbances):
 # In[149]:
 
 
-def process_prostate_kidney_disease():
-    months = ['2020-10-01', '2020-11-01', '2020-12-01']     #, '2021-01-01', '2021-02-01', '2021-03-01']
+def process_health_insurance():
+    months = ['2020-07-01', '2020-08-01', '2020-09-01'] #, '2020-10-01', '2020-11-01', '2020-12-01', '2020-12-31']
     
     final_result = {}
     
@@ -2500,6 +2513,45 @@ def process_prostate_kidney_disease():
         
         # 1. Age
         print("1. Assessing age")
+
+        # Microwave Data
+        print("Getting microwave data")
+        microwave_dataframes = []
+        for i, home in enumerate(power_circuits):
+            microwave_dataframes.append(get_data_in_period(client2, "'{}T00:00:00Z'".format(months[j]), "'{}T00:00:00Z'".format(months[j+1]), "'{}'".format(home), "'{}'".format(power_circuits[home])))
+        
+        # Stove Data
+        print("Getting stove data")
+        stove_dataframes = []
+        for i, home in enumerate(stove_circuits):
+            stove_dataframes.append(get_data_in_period(client2, "'{}T00:00:00Z'".format(months[j]), "'{}T00:00:00Z'".format(months[j+1]), "'{}'".format(home), "'{}'".format(stove_circuits[home])))           
+        
+        # Preprocessing 
+        print("Processing microwave data")
+        microwave_processed = pre_process(microwave_dataframes)
+        print("Processing stove data")
+        stove_processed = pre_process(stove_dataframes)
+
+        del microwave_dataframes
+        del stove_dataframes  
+        
+        # 2. Microwave vs Stovetop Use
+        # TODO: Stove circuits currently uses a mixture of hotplate and oven circuits. Need to discuss this.
+        print("2. Calculating microwave vs stovetop use")
+        microwave_peaks, stove_peaks = microwave_stove_peaks(microwave_processed, stove_processed)
+        pp.pprint(microwave_peaks)
+        pp.pprint(stove_peaks)
+
+        del microwave_processed
+        del stove_processed
+        
+        microwave_normalised = []
+        for val in microwave_peaks:
+            microwave_normalised.append(normalise(val, min(microwave_peaks), max(microwave_peaks)))
+            
+        stovetop_normalised = []
+        for val in stove_peaks:
+            stovetop_normalised.append(normalise(val, min(stove_peaks), max(stove_peaks)))
         
         # Light Data
         print("Getting lights data")
@@ -2511,24 +2563,43 @@ def process_prostate_kidney_disease():
         print("Processing lights data")
         light_processed = pre_process(light_dataframes)
 
+        del light_dataframes
 
-        # 2. Sleep Disturbance
-        print("2. Calculating sleep disturbance")
+        # 3. Sleep Disturbance
+        print("3. Calculating sleep disturbance")
         sleep_disturbances = get_sleep_disturbances(light_processed)
+        pp.pprint(sleep_disturbances)
+        
+        sleep_disturbances_normalised = []
+        for val in sleep_disturbances:
+            if val == -1:
+                sleep_disturbances_normalised.append(-2)
+            else:
+                sleep_disturbances_normalised.append(normalise(val, min([x for x in sleep_disturbances if x != -1]), max(sleep_disturbances)))
 
-#         sleep_disturbances_normalised = []
-#         for val in sleep_disturbances:
-#             if val == -1:
-#                 sleep_disturbances_normalised.append(-2)
-#             else:
-#                 sleep_disturbances_normalised.append(normalise(val, min([x for x in sleep_disturbances if x != -1]), max(sleep_disturbances)))
+        
+        # 4. Sleep Duration
+        print("4. Calculating sleep duration")
+        sleep_schedules = get_all_circadian_rythm(light_processed)
+
+        del light_processed
+
+        sleep_durations = get_sleep_durations(sleep_schedules)
+        pp.pprint(sleep_durations)
+        
+        sleep_durations_normalised = []
+        for val in sleep_durations:
+            if val == -2:
+                sleep_durations_normalised.append(-2)
+            else:
+                sleep_durations_normalised.append(normalise(val, min([x for x in sleep_durations if x != -2]), max(sleep_durations)))
 
                 
         # Ranking
         print("Ranking results...")
-        prostate_kidney_disease_all = prostate_kidney_disease(ages, sleep_disturbances)
+        health_insurance_all = health_insurance(ages, microwave_normalised, stovetop_normalised, sleep_disturbances_normalised, sleep_durations_normalised)
         
-        result = normalise_and_rank(prostate_kidney_disease_all, list(light_circuits.keys()))
+        result = normalise_and_rank(health_insurance_all, list(light_circuits.keys()))
         
         for key in list(result.keys()):
             try:
@@ -2537,9 +2608,11 @@ def process_prostate_kidney_disease():
                 final_result[key] = result[key]
         print("Current result: ", final_result)
         print()
+
+        gc.collect()
     
     for key in list(final_result.keys()):
-        final_result[key] = final_result[key] // 2
+        final_result[key] = final_result[key] // (len(months)-1)
     
     print("--- Final result ---\n", final_result)        
     return final_result
@@ -2651,28 +2724,271 @@ def process_outlier_check():
 # In[ ]:
 
 
-if __name__ == '__main__':
-    start = datetime.datetime.now()
 
-    res = process_stress_anxiety()
+def process_heat_sensitivity():
 
-    end = datetime.datetime.now()
+    months = ['2020-12-01', '2021-01-01', '2021-02-01', '2021-03-01']
+    bom_data_max = load_bom_data("data/extra/bom_data_max.csv")
 
+    final_result = {}
+
+    print("\n------------- HEAT SENSITIVITY -------------\n")
+
+    for j in range(len(months)-1):
+        print("--- Processing {} => {} ---".format(months[j], months[j+1]))
+
+        print("Getting aircon data")
+        aircon_dataframes = []
+        for i, home in enumerate(aircon_circuits):
+            if (aircon_circuits[home] == "none"):
+                aircon_dataframes.append(pd.DataFrame())
+            else:
+                aircon_dataframes.append(get_data_in_period(client2, "'{}T00:00:00Z'".format(months[j]), "'{}T00:00:00Z'".format(months[j+1]), "'{}'".format(home), "'{}'".format(aircon_circuits[home])))
+        
+        # Preprocessing
+        print("Processing aircon data")
+        aircon_processed = pre_process(aircon_dataframes)
+
+        del aircon_dataframes
+
+        aircon_peaks = []
+        for df in aircon_processed:
+            aircon_peaks.append(get_peaks(df, 100, 10000, 10, 1000, 60))
+
+        watt_hours = []
+        for i, df in enumerate(aircon_processed):
+            watt_hours.append(get_watt_hours(aircon_peaks[i], df))
+
+        del aircon_processed
+
+        usages = []
+        for watt_hour in watt_hours:
+            if (len(watt_hour) != 0):
+                usages.append(get_daily_usage(watt_hour).tolist())
+            else:
+                usages.append(-100)
+
+        # calculate the Pearson's correlation between two variables
+        seed(1)
+
+        correlations = []
+        print("BOM: ", bom_data_max[j])
+        print("USAGES: \n")
+        for usage in usages:
+            print(usage)
+            if (usage != -100):
+                correlations.append(pearsonr(bom_data_max[j], usage)[0])
+            else:
+                correlations.append(-2)
+        pp.pprint(correlations)
+
+        correlations_normalised = []
+        for val in correlations:
+            if val == -2:
+                correlations_normalised.append(-9)
+            else:
+                correlations_normalised.append(normalise(val, min([x for x in correlations if x != -9]), max(correlations)))
+
+
+        # Ranking
+        print("Ranking results...")
+        heat_sensitivity_all = heat_sensitivity(correlations_normalised)
+        
+        result = normalise_and_rank(heat_sensitivity_all, list(aircon_circuits.keys()))
+        
+        for i, key in enumerate(list(aircon_circuits.keys())):
+            try:
+                final_result[key] = final_result[key] + result[key]
+            except KeyError:
+                final_result[key] = result[key]
+        print("Current result: ", final_result)
+        print()
+
+        gc.collect()
+    
+    for key in list(final_result.keys()):
+        final_result[key] = final_result[key] / (len(months)-1)
+        
+    print("--- Final result ---\n", final_result)        
+    return final_result
+
+
+
+
+def process_cold_sensitivity():
+
+    months = ['2020-06-01', '2020-07-01', '2020-08-01', '2020-09-01']
+    bom_data_min = load_bom_data("data/extra/bom_data_min.csv")
+
+    final_result = {}
+    
+    print("\n------------- COLD SENSITIVITY -------------\n")
+    
+    for j in range(len(months)-1):
+        print("--- Processing {} => {} ---".format(months[j], months[j+1]))
+
+        print("Getting aircon data")
+        aircon_dataframes = []
+        for i, home in enumerate(aircon_circuits):
+            if (aircon_circuits[home] == "none"):
+                aircon_dataframes.append(pd.DataFrame())
+            else:
+                aircon_dataframes.append(get_data_in_period(client2, "'{}T00:00:00Z'".format(months[j]), "'{}T00:00:00Z'".format(months[j+1]), "'{}'".format(home), "'{}'".format(aircon_circuits[home])))
+        
+        # Preprocessing
+        print("Processing aircon data")
+        aircon_processed = pre_process(aircon_dataframes)
+
+        del aircon_dataframes
+
+        aircon_peaks = []
+        for df in aircon_processed:
+            aircon_peaks.append(get_peaks(df, 100, 10000, 10, 1000, 60))
+
+        watt_hours = []
+        for i, df in enumerate(aircon_processed):
+            watt_hours.append(get_watt_hours(aircon_peaks[i], df))
+
+        del aircon_processed
+
+        usages = []
+        for watt_hour in watt_hours:
+            if (len(watt_hour) != 0):
+                usages.append(get_daily_usage(watt_hour).tolist())
+            else:
+                usages.append(-100)
+
+        # calculate the Pearson's correlation between two variables
+        seed(1)
+
+        correlations = []
+        print("BOM: ", bom_data_min[j])
+        print("USAGES: \n")
+        for usage in usages:
+            print(usage)
+            if (usage != -100):
+                correlations.append(pearsonr(bom_data_min[j], usage)[0])
+            else:
+                correlations.append(-2)
+        pp.pprint(correlations)
+
+        correlations_normalised = []
+        for val in correlations:
+            if val == -2:
+                correlations_normalised.append(-9)
+            else:
+                correlations_normalised.append(normalise(val, min([x for x in correlations if x != -9]), max(correlations)))
+
+
+        # Ranking
+        print("Ranking results...")
+        cold_sensitivity_all = cold_sensitivity(correlations_normalised)
+        
+        result = normalise_and_rank(cold_sensitivity_all, list(aircon_circuits.keys()))
+        
+        for i, key in enumerate(list(aircon_circuits.keys())):
+            try:
+                final_result[key] = final_result[key] + result[key]
+            except KeyError:
+                final_result[key] = result[key]
+        print("Current result: ", final_result)
+        print()
+
+        gc.collect()
+    
+    for key in list(final_result.keys()):
+        final_result[key] = final_result[key] / (len(months)-1)
+        
+    print("--- Final result ---\n", final_result)        
+    return final_result
+
+
+def heat_sensitivity(correlations):
+    print("Correlations: ", correlations)
+
+    ranks = [0] * len(correlations)
+    for i, correlation in enumerate(correlations):
+        if correlation != -9:
+            if (correlation >= 0.8):
+                ranks[i] += 4
+            elif (correlation >= 0.6):
+                ranks[i] += 3
+            elif (correlation >= 0.4):
+                ranks[i] += 2
+            elif (correlation >= 0.2):
+                ranks[i] += 1
+            elif (correlation <= -0.8):
+                ranks[i] -= 4
+            elif (correlation <= -0.6):
+                ranks[i] -= 3
+            elif (correlation <= -0.4):
+                ranks[i] -= 2
+            elif (correlation <= -0.2):
+                ranks[i] -= 1
+    
+    print("Heat Sensitivity Ranks: \t\t\t", ranks)
     print()
-    print("Start: ", start)
-    print("End: ", end)
+    return ranks
 
-    print("Time taken: {} minutes".format(end.time().minute - start.time().minute))
+
+def cold_sensitivity(correlations):
+    print("Correlations: ", correlations)
+
+    ranks = [0] * len(correlations)
+    for i, correlation in enumerate(correlations):
+        if correlation != -9:
+            if (correlation >= 0.8):
+                ranks[i] -= 4
+            elif (correlation >= 0.6):
+                ranks[i] -= 3
+            elif (correlation >= 0.4):
+                ranks[i] -= 2
+            elif (correlation >= 0.2):
+                ranks[i] -= 1
+            elif (correlation <= -0.8):
+                ranks[i] += 4
+            elif (correlation <= -0.6):
+                ranks[i] += 3
+            elif (correlation <= -0.4):
+                ranks[i] += 2
+            elif (correlation <= -0.2):
+                ranks[i] += 1
+    
+    print("Cold Sensitivity Ranks: \t\t\t", ranks)
+    print()
+    return ranks
+
+
+
+
+
+
+
+if __name__ == '__main__':
+    # start = datetime.datetime.now()
+
+    # res = process_health_insurance()
+
+    # end = datetime.datetime.now()
+
+    # print()
+    # print("Start: ", start)
+    # print("End: ", end)
+
+    # print("Time taken: {} minutes".format(end.time().minute - start.time().minute))
 
     # q = """SELECT * FROM "iotawatt" WHERE "device" = 'uq68' AND "sensor" = 'Powerpoints1' AND "time" >= '2020-09-25T00:00:00Z' AND "time" <= '2020-10-01T00:00:00Z'"""
 
     # test_data = pd.DataFrame(client2.query(q, chunked=True))
     # print("DATA: ", test_data[0][0])
+        
 
 
-    # w                   w
-    # /                   /
-    # 10sec   *8640     86400sec               
+
+    process_heat_sensitivity()
+
+
+
 
 
 
