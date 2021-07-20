@@ -4,6 +4,7 @@
 import sys
 import datetime
 import math
+from tkinter.tix import S_REGION
 from typing import List, Tuple
 import numpy as np
 from numpy.lib.function_base import corrcoef
@@ -2493,13 +2494,35 @@ def process_home_risk():
 # Prostate/kidney disease
 def health_insurance(ages, microwave, stovetop, sleep_disturbances, sleep_durations):
     
-    c
+    ranks = [0] * len(ages)
+    for i, sleep_disturbance in enumerate(sleep_disturbances):
+        if sleep_disturbance != -2: 
+            if (sleep_disturbance > 0.6):
+                ranks[i] += 2
+            elif (sleep_disturbance > 0.2):
+                ranks[i] += 1
+    for i, sleep_duration in enumerate(sleep_durations):
+        if sleep_duration != -2:
+            if (sleep_duration < 0.6):
+                ranks[i] += 2
+            elif (sleep_duration < 0.2):
+                ranks[i] += 1
+    for i in range(len(microwave)):
+        if (microwave[i] > 0.4 and stovetop[i] < -0.4):
+            ranks[i] += 2
+        elif (microwave[i] > 0.2 and stovetop[i] < -0.2):
+            ranks[i] += 1
+    for i, age in enumerate(ages.values()):
+        if age >= 65:
+            ranks[i] -= 2
+            
+    for rank in ranks:
+        if (rank < 0):
+            rank = 0
     
-
-
-# In[ ]:
-
-    print("Prostate/Kidney Disease Ranks: \t\t\t", ranks)
+    print("Health Insurance Ranks: \t\t\t", ranks)
+    print()
+    return ranks
 
 
 
@@ -2508,12 +2531,12 @@ def health_insurance(ages, microwave, stovetop, sleep_disturbances, sleep_durati
 
 
 def process_health_insurance():
-    months = ['2020-07-01', '2020-08-01', '2020-09-01'] #, '2020-10-01', '2020-11-01', '2020-12-01', '2020-12-31']
+    months = ['2020-09-01', '2020-10-01']
     
     final_result = {}
     
     for j in range(len(months)-1):
-        print("--- Processing {} => {} ---".format(months[j], months[j+1]))
+        print("\n\n\n\n\n--- Processing {} => {} ---".format(months[j], months[j+1]))
         
         # 1. Age
         print("1. Assessing age")
@@ -2639,7 +2662,7 @@ def process_health_insurance():
 
 
 def process_outlier_check():
-    months = ['2020-10-01', '2020-11-01', '2020-12-01']     #, '2021-01-01', '2021-02-01', '2021-03-01']
+    months = ['2020-08-01', '2020-09-01', '2020-10-01', '2020-11-01', '2020-12-01', '2021-01-01']
     
     outliers = {}
     
@@ -2661,15 +2684,17 @@ def process_outlier_check():
         print("1. Detecting outliers...")
         peaks = []
         for household in consumption_processed:
-            peaks.append(get_peaks(household, 4000, 20000, 120, 720, 0))
+            curr_peaks = get_peaks(household, 4000, 20000, 120, 720, 0)
+            peaks.append(curr_peaks)
         
         # Save outliers
         for i, key in enumerate(list(power_circuits.keys())):
             try:
-                outliers[key] + peaks[i]
+                outliers[key] = peaks[i]
             except KeyError:
                 outliers[key] = peaks[i]
-        print("Current result: ", outliers)
+        print("Current result: ")
+        pp.pprint(list(outliers.values()))
         print()
     
     print("--- Outliers ---\n", outliers)        
@@ -2708,24 +2733,186 @@ def process_outlier_check():
 
 
 # In[ ]:
-
-
-
+def get_solar(data):
+    total = 0
+    for val in data:
+        total += val
+    print(total)
+    return int((total / len(data)) * (60*60*24/10))
 
 
 # In[ ]:
-
-
-
+def get_all_solars(data):
+    consumptions = []
+    for household in data:
+        consumptions.append(get_solar(household))
+    return consumptions
 
 
 # In[164]:
 
 
-# TODO: Optimise pre_process(), expand breadth of households analysed, analyse a larger timeframe.
 
 
 # In[ ]:
+
+def sustainability(consumptions, solars):
+    
+    c_ranks = {}
+    for i, home in enumerate(noSolar):
+        if consumptions[i] != -2: 
+            if (consumptions[i] < -0.8):
+                curr = 3
+            elif (consumptions[i] < -0.5):
+                curr = 2
+            elif (consumptions[i] < -0.2):
+                curr = 1
+            elif (consumptions[i] > 0.8):
+                curr = -3
+            elif (consumptions[i] > 0.5):
+                curr = -2
+            elif (consumptions[i] > 0.2):
+                curr = -1
+            try:
+                c_ranks[home] = c_ranks[home] + curr
+            except KeyError:
+                c_ranks[home] = curr
+    
+    s_ranks = {}
+    for i, home in enumerate(hasSolar):
+        if solars[i] != -2: 
+            if (solars[i] > 0.8):
+                curr = -3
+            elif (solars[i] > 0.5):
+                curr = -2
+            elif (solars[i] > 0.2):
+                curr = -1
+            elif (solars[i] < -0.8):
+                curr = 3
+            elif (solars[i] < -0.5):
+                curr = 2
+            elif (solars[i] < -0.2):
+                curr = 1
+            try:
+                s_ranks[home] = s_ranks[home] + curr
+            except KeyError:
+                s_ranks[home] = curr
+    
+    print("Sustainability Ranks: \t\t\t", c_ranks, s_ranks)
+    print()
+    return list(c_ranks.values()), list(s_ranks.values())
+
+
+hasSolar = ["uq10", "uq12", "uq26", "uq56", "uq61", "uq67", "uq68", "hfs01a"]
+noSolar = ["uq23", "uq24", "uq33", "uq37", "uq45", "uq48", "uq49", "uq57", "uq75", "uq85", "uq88", "uq92"]
+
+def process_sustainability():
+    months = ['2020-07-01', '2020-08-01', '2020-09-01', '2020-10-01', '2020-11-01', '2020-12-01', '2021-01-01']
+
+    final_result = {}
+
+    print("\n------------- SUSTAINABILITY -------------\n")
+
+    # print("1. Heat Sensitivity")
+    # heat_sensitivity = process_heat_sensitivity()
+
+    # print("2. Cold Sensitivity")
+    # cold_sensitivity = process_cold_sensitivity()
+
+    # for home in list(heat_sensitivity.keys()):
+    #     final_result[home] = (heat_sensitivity[home] + cold_sensitivity[home]) // 2
+
+    for j in range(len(months)-1):
+        print("--- Processing {} => {} ---".format(months[j], months[j+1]))
+
+        # Consumption Data
+        print("Getting consumption data")
+        consumption_dataframes = []
+        for i, home in enumerate(noSolar):
+            consumption_dataframes.append(get_data_in_period(client2, "'{}T00:00:00Z'".format(months[j]), "'{}T00:00:00Z'".format(months[j+1]), "'{}'".format(home), "'Consumption'"))
+        
+        # Preprocessing
+        print("Processing consumption data")
+        consumption_processed = pre_process(consumption_dataframes)
+
+        del consumption_dataframes
+
+        # 1. Consumption
+        print("1. Calculating consumption")
+        consumptions = get_all_consumptions(consumption_processed)
+        print("Consumptions: ", consumptions)
+
+        del consumption_processed
+        
+        consumption_normalised = []
+        for val in consumptions:
+            if val == -2:
+                consumption_normalised.append(-2)
+            else:
+                consumption_normalised.append(normalise(val, min([x for x in consumptions if x != -2]), max(consumptions)))
+
+        # Solar Data
+        print("Getting solar data")
+        solar_dataframes = []
+        for i, home in enumerate(hasSolar):
+            solar_dataframes.append(get_data_in_period(client2, "'{}T00:00:00Z'".format(months[j]), "'{}T00:00:00Z'".format(months[j+1]), "'{}'".format(home), "'Net'"))
+        
+        # Preprocessing
+        print("Processing solar data")
+        solar_processed = pre_process(solar_dataframes)
+
+        del solar_dataframes
+
+        # 2. Solar
+        print("2. Calculating solar")
+        solars = get_all_solars(solar_processed)
+        print("Solars: ", solars)
+
+        del solar_processed
+        
+        solar_normalised = []
+        for val in solars:
+            if val == -2:
+                solar_normalised.append(-2)
+            else:
+                solar_normalised.append(normalise(val, min([x for x in solars if x != -2]), max(solars)))
+
+        # Ranking
+        print("Ranking results...")
+        consumption_ranks, solar_ranks = sustainability(consumption_normalised, solar_normalised)
+        
+        c_result = normalise_and_rank(consumption_ranks, noSolar)
+        s_result = normalise_and_rank(solar_ranks, hasSolar)
+        print(c_result)
+        print(s_result)
+
+        result = {}
+
+        for i, home in enumerate(noSolar):
+            result[home] = c_result[home]
+        
+        for i, home in enumerate(hasSolar):
+            result[home] = s_result[home]
+
+        print("This result: ", result)
+        pp.pprint(list(result.values()))
+        print()
+        
+        for i, key in enumerate(list(aircon_circuits.keys())):
+            try:
+                final_result[key] = final_result[key] + result[key]
+            except KeyError:
+                final_result[key] = result[key]
+
+        gc.collect()
+    
+    for key in list(final_result.keys()):
+        final_result[key] = final_result[key] // (len(months)-1)
+        
+    print("--- Final result ---\n", final_result)        
+    return final_result
+
+
 
 
 
@@ -2772,6 +2959,7 @@ def process_heat_sensitivity():
             else:
                 usages.append(-100)
 
+        # TODO: Maybe instead of correlation, simply use the probability of aircon use given a certain temperature?
         # calculate the Pearson's correlation between two variables
         seed(1)
 
@@ -2989,7 +3177,7 @@ if __name__ == '__main__':
 
 
 
-    process_cold_sensitivity()
+    process_sustainability()
 
 
 
