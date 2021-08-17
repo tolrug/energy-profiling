@@ -15,6 +15,8 @@ import pprint as pp
 import gc
 from influxdb import InfluxDBClient
 from calendar import monthrange
+
+from pandas.core.frame import DataFrame
 pd.options.mode.chained_assignment = None  # default='warn'
 import ipdb # for debugging
 # ipdb.set_trace()
@@ -31,7 +33,7 @@ from scipy.stats import pearsonr
 # Removes invalid data and converts everything to whole number-rounded ints
 def process_row(series: pd.Series) -> pd.Series:
     series1 = pd.Series([0 if str(row).startswith("'") else row for row in series])
-    series1 = series1.apply(lambda row: int(round(float(row),0)))
+    series1 = series1.apply(lambda row: int(round(float(row),0)) if not math.isnan(row) else 0)
     series1.index = series.index
     return series1
 
@@ -620,6 +622,19 @@ def get_most_recent_time(df):
     last_time = last_arr[-1].get("time")
     return "'{}'".format(last_time)
 
+# Apply a certain level of granularity over the data
+# Default was 5sec == 1/2min == 0.0833min
+def apply_granularity(df: pd.DataFrame, granularity: int) -> pd.DataFrame:
+    default_granularity = 1/12  # 5sec
+    df = df.set_index(pd.to_datetime(df.index))
+    df = df.resample('{}min'.format(12 * granularity * default_granularity)).mean()
+    # if (df.size != 10000):
+    #     print(df.size)
+    #     df = df.drop(df.tail(1).index)
+    #     print(df.size)
+    # print(df.size)
+    return df
+
 # Example usage of iteratively calling the InfluxDB
 # microwave_dataframes = []
 # for i, home in enumerate(power_circuits):
@@ -627,13 +642,13 @@ def get_most_recent_time(df):
 
 # After retrieving bulk data from the db, call this function.
 # It will call the process_row() function and return a list of DF's
-def pre_process(dataframes):
+def pre_process(dataframes, granularity = 1/12):
     post_process = []
     if (not isinstance(dataframes, list)):
         new_df = []
         new_df.append(dataframes)
         dataframes = new_df
-        
+    
     for dataframe in dataframes:
         df = pd.DataFrame()
         if (dataframe.empty):
@@ -644,16 +659,16 @@ def pre_process(dataframes):
             to_append = to_append.set_index('time')
             to_append = to_append.loc[:, "Watts"]
             to_append = to_append.to_frame()
-    
-            # TODO: Filter out the time values that are not on the minute for getting 1-min granularity
-#             to_append = to_append.groupby(np.arange(len(to_append))//6).mean()
-#             to_append = to_append.loc[to_append.index.str.endswith('00Z')]
+            k = 12 * granularity
+            idx = to_append.index[::k]
+            to_append = apply_granularity(to_append, granularity)
+            if (to_append.size != len(idx)):
+                to_append = to_append.drop(to_append.tail(to_append.size - len(idx)).index)
+            to_append = to_append.set_index(idx)
+
             df = df.append(to_append)
         
         processing = process_row(df.squeeze())
-        # TODO: Granularity filter
-#         processing_means = processing.groupby(np.arange(len(processing))//6).sum()
-#         processing_means.index = processing.index[::6]
 
         post_process.append(processing)
         
@@ -1994,7 +2009,11 @@ if __name__ == '__main__':
     # start = datetime.datetime.now()
 
     # Call your process_{metric}() function here
-    print("main")
+    data = get_data_in_period(client, "'2020-06-01T00:00:00Z'", "'2020-06-30T00:00:00Z'", "'hfs01a'", "'Lights2'")   
+    processed = pre_process(data, 5)      
+
+    print(processed)  
+
 
     # end = datetime.datetime.now()
 
