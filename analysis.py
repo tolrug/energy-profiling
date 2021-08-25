@@ -24,6 +24,7 @@ pd.set_option('display.max_rows', 100)
 from numpy.random import seed
 from scipy.stats import pearsonr
 
+
 # Example: Loads data from the "Power1" circuit from a file downloaded from the PhiSaver website.
 # df = pd.read_csv("data/steve-mar-2021.csv", sep=';', index_col=0, dtype=object)
 # df = df.sort_values(by='Time', ascending=True)
@@ -132,9 +133,10 @@ def isInRange(peak_value: int, trough_value: int, min_power: int, max_power: int
 def get_peaks(data: pd.Series, min_power: int, max_power: int, min_required_duration: int = 0, max_required_duration: int = sys.maxsize, off_requirement: int = 0) -> List[Tuple[str, int, int]]:
     i = 5
     peaks = []
-    
+    for item in data.items():
+        print(item)
     while i < len(data):
-        peak_duration = 2 # +1 min for the initial turning on, +1 min for turning off
+        peak_duration = 0 # +1 min for the initial turning on, +1 min for turning off
         try:
             curr_idx = i
             prev_idx = i-1
@@ -518,7 +520,7 @@ def plot_probs_combined(min_temps_winter: List[int], usage_series_winter: pd.Ser
 
 # ------------ DATABASE INTERACTIONS START HERE ------------ #
 
-client = InfluxDBClient(host='live2.phisaver.com', database='phisaver', username='reader', password='Rmagine!', port=8086, headers={'Accept': 'application/json'}, gzip=True)
+# client = InfluxDBClient(host='live2.phisaver.com', database='phisaver', username='reader', password='Rmagine!', port=8086, headers={'Accept': 'application/json'}, gzip=True)
 
 # These kinds of structures are hard-coded dictionaries which tell us the specific circuit name for each category (i.e. oven, main powerpoint, lights, aircon). 
 oven_circuits = {   
@@ -547,47 +549,47 @@ oven_circuits = {
 # TODO: Change this to be the circuit with the most kitchen-like activity (not neccessarily the fridge's circuit)
 power_circuits = {                     
                     "uq10": "Powerpoints1",
-                    "uq12": "Powerpoints2",
-                    "uq23": "Powerpoints1",
-                    "uq24": "Powerpoints2",
-                    "uq26": "Powerpoints1",  
-                    "uq33": "Powerpoints2",
-                    "uq37": "PowerpointsRear",
-                    "uq45": "Powerpoints1",
-                    "uq48": "Powerpoints2",
-                    "uq49": "Powerpoints1",
-                    "uq56": "Powerpoints2",
-                    "uq57": "Powerpoints4",
-                    "uq61": "Misc1",
-                    "uq67": "Powerpoints1", 
-                    "uq68": "Powerpoints1",
-                    "uq75": "Powerpoints1",
-                    "uq85": "Powerpoints2",
-                    "uq88": "Powerpoints1",
-                    "uq92": "Powerpoints1",
+                    # "uq12": "Powerpoints2",
+                    # "uq23": "Powerpoints1",
+                    # "uq24": "Powerpoints2",
+                    # "uq26": "Powerpoints1",  
+                    # "uq33": "Powerpoints2",
+                    # "uq37": "PowerpointsRear",
+                    # "uq45": "Powerpoints1",
+                    # "uq48": "Powerpoints2",
+                    # "uq49": "Powerpoints1",
+                    # "uq56": "Powerpoints2",
+                    # "uq57": "Powerpoints4",
+                    # "uq61": "Misc1",
+                    # "uq67": "Powerpoints1", 
+                    # "uq68": "Powerpoints1",
+                    # "uq75": "Powerpoints1",
+                    # "uq85": "Powerpoints2",
+                    # "uq88": "Powerpoints1",
+                    # "uq92": "Powerpoints1",
                     "hfs01a": "Power1",
                 }
 
 stove_circuits = {  
                     "uq10": "Oven",
-                    "uq12": "Stove",
-                    "uq23": "Stove",
-                    "uq24": "OvenHob",
-                    "uq26": "Stove",
-                    "uq33": "Stove",
-                    "uq37": "Hotplate",
-                    "uq45": "Oven",
-                    "uq48": "Hotplates",
-                    "uq49": "Hob",
-                    "uq56": "Oven",
-                    "uq57": "Oven",
-                    "uq61": "Oven",
-                    "uq67": "Stove", 
-                    "uq68": "Hotplate",
-                    "uq75": "Hob",
-                    "uq85": "HotPlateOven",
-                    "uq88": "Oven",
-                    "uq92": "Stove",
+                    # "uq12": "Stove",
+                    # "uq23": "Stove",
+                    # "uq24": "OvenHob",
+                    # "uq26": "Stove",
+                    # "uq33": "Stove",
+                    # "uq37": "Hotplate",
+                    # "uq45": "Oven",
+                    # "uq48": "Hotplates",
+                    # "uq49": "Hob",
+                    # "uq56": "Oven",
+                    # "uq57": "Oven",
+                    # "uq61": "Oven",
+                    # "uq67": "Stove", 
+                    # "uq68": "Hotplate",
+                    # "uq75": "Hob",
+                    # "uq85": "HotPlateOven",
+                    # "uq88": "Oven",
+                    # "uq92": "Stove",
                     "hfs01a": "Hotplate"
                 }
 
@@ -623,11 +625,12 @@ def get_most_recent_time(df):
     return "'{}'".format(last_time)
 
 # Apply a certain level of granularity over the data
-# Default was 5sec == 1/2min == 0.0833min
+# Default was 5sec == 1/12min == 0.0833min
 def apply_granularity(df: pd.DataFrame, granularity: int) -> pd.DataFrame:
+    print("granularity: ", granularity)
     default_granularity = 1/12  # 5sec
     df = df.set_index(pd.to_datetime(df.index))
-    df = df.resample('{}min'.format(12 * granularity * default_granularity)).mean()
+    df = df.resample('{}min'.format(int(round(12 * granularity * default_granularity)))).mean()
     # if (df.size != 10000):
     #     print(df.size)
     #     df = df.drop(df.tail(1).index)
@@ -642,7 +645,7 @@ def apply_granularity(df: pd.DataFrame, granularity: int) -> pd.DataFrame:
 
 # After retrieving bulk data from the db, call this function.
 # It will call the process_row() function and return a list of DF's
-def pre_process(dataframes, granularity = 1/12):
+def pre_process(dataframes, granularity = 1/12): #granularity in mins = 1/12 mins = 0.0833 mins = 5 seconds = default granularity of db
     post_process = []
     if (not isinstance(dataframes, list)):
         new_df = []
@@ -659,13 +662,13 @@ def pre_process(dataframes, granularity = 1/12):
             to_append = to_append.set_index('time')
             to_append = to_append.loc[:, "Watts"]
             to_append = to_append.to_frame()
-            k = 12 * granularity
-            idx = to_append.index[::k]
-            to_append = apply_granularity(to_append, granularity)
-            if (to_append.size != len(idx)):
-                to_append = to_append.drop(to_append.tail(to_append.size - len(idx)).index)
-            to_append = to_append.set_index(idx)
-
+            if (granularity >= 1):
+                k = int(round(12 * granularity))
+                idx = to_append.index[::k]
+                to_append = apply_granularity(to_append, granularity)
+                if (to_append.size != len(idx)):
+                    to_append = to_append.drop(to_append.tail(to_append.size - len(idx)).index)
+                to_append.index = [datetime.datetime.strptime(x.tz_localize(None).strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%dT%H:%M:%SZ') for x in to_append.index]
             df = df.append(to_append)
         
         processing = process_row(df.squeeze())
@@ -1423,10 +1426,12 @@ def health_insurance(ages, microwave, stovetop, sleep_disturbances, sleep_durati
 
 # The main function for processing the home risk calculation. 
 # Iterating through the months of the sample, it reads from the db, calls the helper functions above, and ranks the households against each other.
-def process_health_insurance():
-    months = ['2020-09-01', '2020-10-01']
+def process_health_insurance(granularity=1/12): #granularity is in mins
+    months = ['2020-07-01', '2020-08-01']
     
     final_result = {}
+
+    client = InfluxDBClient(host='live2.phisaver.com', database='phisaver', username='reader', password='Rmagine!', port=8086, headers={'Accept': 'application/json'}, gzip=True)
     
     for j in range(len(months)-1):
         print("\n\n\n\n\n--- Processing {} => {} ---".format(months[j], months[j+1]))
@@ -1448,9 +1453,9 @@ def process_health_insurance():
         
         # Preprocessing 
         print("Processing microwave data")
-        microwave_processed = pre_process(microwave_dataframes)
+        microwave_processed = pre_process(microwave_dataframes, granularity)
         print("Processing stove data")
-        stove_processed = pre_process(stove_dataframes)
+        stove_processed = pre_process(stove_dataframes, granularity)
 
         del microwave_dataframes
         del stove_dataframes  
@@ -1473,6 +1478,8 @@ def process_health_insurance():
         for val in stove_peaks:
             stovetop_normalised.append(normalise(val, min(stove_peaks), max(stove_peaks)))
         
+        exit()
+
         # Light Data
         print("Getting lights data")
         light_dataframes = []
@@ -2009,11 +2016,12 @@ if __name__ == '__main__':
     # start = datetime.datetime.now()
 
     # Call your process_{metric}() function here
-    data = get_data_in_period(client, "'2020-06-01T00:00:00Z'", "'2020-06-30T00:00:00Z'", "'hfs01a'", "'Lights2'")   
-    processed = pre_process(data, 5)      
+    # data = get_data_in_period(client, "'2020-06-01T00:00:00Z'", "'2020-06-30T00:00:00Z'", "'hfs01a'", "'Lights2'")   
+    # processed = pre_process(data, 5)      
 
-    print(processed)  
+    # print(processed)  
 
+    process_health_insurance(5)
 
     # end = datetime.datetime.now()
 
