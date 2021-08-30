@@ -130,11 +130,9 @@ def isInRange(peak_value: int, trough_value: int, min_power: int, max_power: int
 # Returns a series of tuples of shape: (peak_start_time, peak_max_value, peak_duration),
 # where each peak is within the range specified, finishes within the specified duration, and 
 # is off for at least off_requirement minutes after the peak
-def get_peaks(data: pd.Series, min_power: int, max_power: int, min_required_duration: int = 0, max_required_duration: int = sys.maxsize, off_requirement: int = 0) -> List[Tuple[str, int, int]]:
+def get_peaks(data: pd.Series, min_power: int, max_power: int, min_required_duration: int = 0, max_required_duration: int = sys.maxsize, off_requirement: int = 0, granularity: int = 1/12) -> List[Tuple[str, int, int]]:
     i = 5
     peaks = []
-    for item in data.items():
-        print(item)
     while i < len(data):
         peak_duration = 0 # +1 min for the initial turning on, +1 min for turning off
         try:
@@ -154,17 +152,17 @@ def get_peaks(data: pd.Series, min_power: int, max_power: int, min_required_dura
                         next_idx+=1
                         if (data.iloc[curr_idx] > data.iloc[peak_idx]):
                             peak_idx=curr_idx
-                        peak_duration+=1
+                        peak_duration += granularity
                     elif (abs(data.iloc[next_idx] - data.iloc[curr_idx]) < 10): # not rising but still at the same peak
                         curr_idx+=1
                         prev_idx+=1
                         next_idx+=1
-                        peak_duration+=1
+                        peak_duration += granularity
                     elif (data.iloc[next_idx] > data.iloc[climb_start_idx] + 150): # not at (close enough to) being a trough yet
                         curr_idx+=1
                         prev_idx+=1
                         next_idx+=1
-                        peak_duration+=1
+                        peak_duration += granularity
                     else: # at a trough, so append climb_start which is the initial peak
                         if (peak_duration <= max_required_duration and 
                             isInRange(data.iloc[peak_idx], data.iloc[climb_start_idx], min_power, max_power)):
@@ -173,7 +171,7 @@ def get_peaks(data: pd.Series, min_power: int, max_power: int, min_required_dura
                                 if (data.iloc[next_idx+1] > data.iloc[next_idx] + 100): # hasn't been a trough for long enough
                                     satisfied_off_requirement = False
                                     break
-                                curr_off_duration -= 1
+                                curr_off_duration -= granularity
                                 curr_idx+=1
                                 prev_idx+=1
                                 next_idx+=1
@@ -183,7 +181,7 @@ def get_peaks(data: pd.Series, min_power: int, max_power: int, min_required_dura
                                 next_idx+=1
                                 continue
                             if (not peak_duration < min_required_duration):
-                                peaks.append((data.index[climb_start_idx], data.iloc[peak_idx] - data.iloc[climb_start_idx], peak_duration))
+                                peaks.append((data.index[climb_start_idx], data.iloc[peak_idx] - data.iloc[climb_start_idx], round(peak_duration,2)))
                         break
             i = next_idx
         except IndexError:
@@ -627,7 +625,6 @@ def get_most_recent_time(df):
 # Apply a certain level of granularity over the data
 # Default was 5sec == 1/12min == 0.0833min
 def apply_granularity(df: pd.DataFrame, granularity: int) -> pd.DataFrame:
-    print("granularity: ", granularity)
     default_granularity = 1/12  # 5sec
     df = df.set_index(pd.to_datetime(df.index))
     df = df.resample('{}min'.format(int(round(12 * granularity * default_granularity)))).mean()
@@ -681,16 +678,18 @@ def pre_process(dataframes, granularity = 1/12): #granularity in mins = 1/12 min
     return post_process
 
 # Gets the microwave and stove peaks
-def microwave_stove_peaks(processed, stove_processed):
+def microwave_stove_peaks(processed, stove_processed, granularity):
     microwave = []
     stove = []
     
     for df in processed:
-        microwave_peaks = get_peaks(df, 600, 1200, 0, 10, 0)
+        microwave_peaks = get_peaks(df, 600, 1200, 0, 10, 0, granularity)
+        pp.pprint(microwave_peaks)
         microwave.append(len(microwave_peaks))
         
     for df in stove_processed:
-        stove_peaks = get_peaks(df, 500, 5000, 0, 120, 60)
+        stove_peaks = get_peaks(df, 500, 5000, 0, 120, 60, granularity)
+        pp.pprint(stove_peaks)
         stove.append(len(stove_peaks))
         
     return microwave, stove
@@ -1463,7 +1462,7 @@ def process_health_insurance(granularity=1/12): #granularity is in mins
         # 2. Microwave vs Stovetop Use
         # TODO: Stove circuits currently uses a mixture of hotplate and oven circuits. Need to discuss this.
         print("2. Calculating microwave vs stovetop use")
-        microwave_peaks, stove_peaks = microwave_stove_peaks(microwave_processed, stove_processed)
+        microwave_peaks, stove_peaks = microwave_stove_peaks(microwave_processed, stove_processed, granularity)
         pp.pprint(microwave_peaks)
         pp.pprint(stove_peaks)
 
@@ -2021,7 +2020,7 @@ if __name__ == '__main__':
 
     # print(processed)  
 
-    process_health_insurance(5)
+    process_health_insurance(1)
 
     # end = datetime.datetime.now()
 
