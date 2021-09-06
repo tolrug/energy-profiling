@@ -591,11 +591,20 @@ stove_circuits = {
                     "hfs01a": "Hotplate"
                 }
 
+
+# Transforms a UTC time string into a timezone aware time string
+def localTimeFromUtc(start, end):
+    start = (datetime.datetime.strptime(start, "'%Y-%m-%dT%H:%M:%SZ'") - datetime.timedelta(hours=10)).strftime("'%Y-%m-%dT%H:%M:%SZ'")
+    end = (datetime.datetime.strptime(end, "'%Y-%m-%dT%H:%M:%SZ'") - datetime.timedelta(hours=10)).strftime("'%Y-%m-%dT%H:%M:%SZ'")
+    return start, end
+
 # Returns a DateFrame containing a bunch of other DataFrames of raw data from the PhiSaver InfluxDB.
 # The chunked=True parameter to the InfluxDB client is important. This ensures that the server is not overloaded 
 # and only retrieves a certain amount of data with any one call.
 # Inputs: The parameters to call the query with.
 def get_data_in_period(client, start_date, end_date, device, sensor):
+    # Change from UTC to local time
+    start_date, end_date = localTimeFromUtc(start_date, end_date)
     current_date = start_date
     dataF = pd.DataFrame()
     
@@ -626,8 +635,8 @@ def get_most_recent_time(df):
 # Default was 5sec == 1/12min == 0.0833min
 def apply_granularity(df: pd.DataFrame, granularity: int) -> pd.DataFrame:
     default_granularity = 1/12  # 5sec
-    df = df.set_index(pd.to_datetime(df.index))
-    df = df.resample('{}min'.format(int(round(12 * granularity * default_granularity)))).mean()
+    # df = df.set_index(pd.to_datetime(df.index))
+    df = df.resample('{}min'.format(int(round(12 * granularity * default_granularity)))).mean() # TODO: Do we actually want to take the mean here or just choose every nth point and ignore the rest?
     # if (df.size != 10000):
     #     print(df.size)
     #     df = df.drop(df.tail(1).index)
@@ -657,6 +666,7 @@ def pre_process(dataframes, granularity = 1/12): #granularity in mins = 1/12 min
         for inner_df in dataframe[0]:
             to_append = pd.DataFrame(inner_df)
             to_append = to_append.set_index('time')
+            to_append = to_append.set_index(pd.to_datetime(to_append.index))
             to_append = to_append.loc[:, "Watts"]
             to_append = to_append.to_frame()
             if (granularity >= 1):
@@ -665,7 +675,8 @@ def pre_process(dataframes, granularity = 1/12): #granularity in mins = 1/12 min
                 to_append = apply_granularity(to_append, granularity)
                 if (to_append.size != len(idx)):
                     to_append = to_append.drop(to_append.tail(to_append.size - len(idx)).index)
-                to_append.index = [datetime.datetime.strptime(x.tz_localize(None).strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%dT%H:%M:%SZ') for x in to_append.index]
+                
+            to_append.index = [(datetime.datetime.strptime(x.tz_localize(None).strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S') + datetime.timedelta(hours=10)).strftime('%Y-%m-%dT%H:%M:%SZ') for x in to_append.index]
             df = df.append(to_append)
         
         processing = process_row(df.squeeze())
@@ -2020,7 +2031,7 @@ if __name__ == '__main__':
 
     # print(processed)  
 
-    process_health_insurance(1)
+    process_health_insurance()
 
     # end = datetime.datetime.now()
 
