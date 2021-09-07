@@ -2062,7 +2062,13 @@ if __name__ == '__main__':
     for df in microwave_processed:
         microwave_peaks = get_peaks(df, 600, 1200, 1, 10, 2, granularity)
         pp.pprint(microwave_peaks)
-    
+
+    # TODO
+    # 1. Figure out best way to down-sample data (mean, max, first)
+    # 2. Figure out which "events" to analyse
+    # 3. Figure out a way to determine the number of "events" per household per time-period
+    # 4. Figure out a way to measure the accuracy of detecting "events" per granularity
+    # 5. Figure out a nice way to graph/tabulate the accuracies   
     
 
         
