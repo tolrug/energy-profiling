@@ -133,27 +133,29 @@ def isInRange(peak_value: int, trough_value: int, min_power: int, max_power: int
 def get_peaks(data: pd.Series, min_power: int, max_power: int, min_required_duration: int = 0, max_required_duration: int = sys.maxsize, off_requirement: int = 0, granularity: int = 1/12) -> List[Tuple[str, int, int]]:
     i = 5
     peaks = []
+    # for i in data.iteritems():
+        # print(i)
     while i < len(data):
-        peak_duration = 0 # +1 min for the initial turning on, +1 min for turning off
+        peak_duration = granularity # +1 tick for the initial turning on
         try:
             curr_idx = i
             prev_idx = i-1
             next_idx = i+1
             climb_start_idx = 0
             peak_idx = 0
-            if (data.iloc[curr_idx] - data.iloc[prev_idx] > 50): # could be the start of a peak
+            if (data.iloc[curr_idx] - data.iloc[prev_idx] > 200): # could be the start of a peak
                 climb_start_idx = prev_idx # mark start of climb...
                 peak_idx = curr_idx
                 while(True):
                     curr_off_duration = off_requirement
-                    if (data.iloc[next_idx] - data.iloc[curr_idx] > 10): # still rising... not at peak yet
+                    if (data.iloc[next_idx] - data.iloc[curr_idx] > 0): # still rising... not at peak yet
                         curr_idx+=1
                         prev_idx+=1
                         next_idx+=1
                         if (data.iloc[curr_idx] > data.iloc[peak_idx]):
                             peak_idx=curr_idx
                         peak_duration += granularity
-                    elif (abs(data.iloc[next_idx] - data.iloc[curr_idx]) < 10): # not rising but still at the same peak
+                    elif (abs(data.iloc[next_idx] - data.iloc[curr_idx]) < 100): # not rising but still at the same peak
                         curr_idx+=1
                         prev_idx+=1
                         next_idx+=1
@@ -180,7 +182,7 @@ def get_peaks(data: pd.Series, min_power: int, max_power: int, min_required_dura
                                 prev_idx = curr_idx-1
                                 next_idx+=1
                                 continue
-                            if (not peak_duration < min_required_duration):
+                            if (peak_duration >= min_required_duration):
                                 peaks.append((data.index[climb_start_idx], data.iloc[peak_idx] - data.iloc[climb_start_idx], round(peak_duration,2)))
                         break
             i = next_idx
@@ -619,7 +621,6 @@ def get_data_in_period(client, start_date, end_date, device, sensor):
         if (current_date == most_recent_time or most_recent_time == -1):
             break
         current_date = most_recent_time
-    
     return dataF
 
 # Gets the string representing the time of the last retrieved entry from the DB.
@@ -634,9 +635,9 @@ def get_most_recent_time(df):
 # Apply a certain level of granularity over the data
 # Default was 5sec == 1/12min == 0.0833min
 def apply_granularity(df: pd.DataFrame, granularity: int) -> pd.DataFrame:
-    default_granularity = 1/12  # 5sec
+    default_granularity = 1/6  # 5sec
     # df = df.set_index(pd.to_datetime(df.index))
-    df = df.resample('{}min'.format(int(round(12 * granularity * default_granularity)))).mean() # TODO: Do we actually want to take the mean here or just choose every nth point and ignore the rest?
+    df = df.resample('{}min'.format(int(round(6 * granularity * default_granularity)))).mean() # TODO: Do we actually want to take the mean here or just choose every nth point and ignore the rest?
     # if (df.size != 10000):
     #     print(df.size)
     #     df = df.drop(df.tail(1).index)
@@ -665,19 +666,37 @@ def pre_process(dataframes, granularity = 1/12): #granularity in mins = 1/12 min
             continue
         for inner_df in dataframe[0]:
             to_append = pd.DataFrame(inner_df)
-            to_append = to_append.set_index('time')
-            to_append = to_append.set_index(pd.to_datetime(to_append.index))
-            to_append = to_append.loc[:, "Watts"]
-            to_append = to_append.to_frame()
-            if (granularity >= 1):
-                k = int(round(12 * granularity))
-                idx = to_append.index[::k]
-                to_append = apply_granularity(to_append, granularity)
-                if (to_append.size != len(idx)):
-                    to_append = to_append.drop(to_append.tail(to_append.size - len(idx)).index)
-                
-            to_append.index = [(datetime.datetime.strptime(x.tz_localize(None).strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S') + datetime.timedelta(hours=10)).strftime('%Y-%m-%dT%H:%M:%SZ') for x in to_append.index]
             df = df.append(to_append)
+
+        df = df.set_index('time')
+        df = df.set_index(pd.to_datetime(df.index))
+        df = df.loc[:, "Watts"]
+        df = df.to_frame()
+        if (granularity >= 1):
+            k = int(round(6 * granularity))
+            # idx = df.index[::k]
+            df = apply_granularity(df, granularity)
+            # if (df.size != len(idx)):
+            #     df = df.drop(df.tail(df.size - len(idx)).index)
+            
+        df.index = [(datetime.datetime.strptime(x.tz_localize(None).strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S') + datetime.timedelta(hours=10)).strftime('%Y-%m-%dT%H:%M:%SZ') for x in df.index]
+
+            # to_append = to_append.set_index('time')
+            # to_append = to_append.set_index(pd.to_datetime(to_append.index))
+            # to_append = to_append.loc[:, "Watts"]
+            # to_append = to_append.to_frame()
+            # if (granularity >= 1):
+            #     k = int(round(12 * granularity))
+            #     idx = to_append.index[::k]
+            #     print('INDEX: ', idx)
+            #     to_append = apply_granularity(to_append, granularity)
+            #     if (to_append.size != len(idx)):
+            #         to_append = to_append.drop(to_append.tail(to_append.size - len(idx)).index)
+                
+            # to_append.index = [(datetime.datetime.strptime(x.tz_localize(None).strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S') + datetime.timedelta(hours=10)).strftime('%Y-%m-%dT%H:%M:%SZ') for x in to_append.index]
+            # pp.pprint(to_append)
+            
+            # df = df.append(to_append)
         
         processing = process_row(df.squeeze())
 
@@ -694,12 +713,12 @@ def microwave_stove_peaks(processed, stove_processed, granularity):
     stove = []
     
     for df in processed:
-        microwave_peaks = get_peaks(df, 600, 1200, 0, 10, 0, granularity)
+        microwave_peaks = get_peaks(df, 600, 1200, 1, 10, 0, granularity)
         pp.pprint(microwave_peaks)
         microwave.append(len(microwave_peaks))
         
     for df in stove_processed:
-        stove_peaks = get_peaks(df, 500, 5000, 0, 120, 60, granularity)
+        stove_peaks = get_peaks(df, 500, 5000, 1, 120, 60, granularity)
         pp.pprint(stove_peaks)
         stove.append(len(stove_peaks))
         
@@ -870,7 +889,7 @@ def get_sleep_disturbances(data):
         curr_disturbances = get_peaks(household, 5, 1000, 1, 30, 60)
         try:
             circadian_rhythm = get_circadian_rhythm(household)
-            curr_disturbances = [peak for peak in curr_disturbances if compareTime(peak[0][11:], circadian_rhythm[0]) < 0                                  or compareTime(peak[0][11:], circadian_rhythm[1]) > 0]
+            curr_disturbances = [peak for peak in curr_disturbances if compareTime(peak[0][11:], circadian_rhythm[0]) < 0 or compareTime(peak[0][11:], circadian_rhythm[1]) > 0]
             sleep_disturbances.append(curr_disturbances)
         except ZeroDivisionError:
             sleep_disturbances.append(-1)
@@ -2031,7 +2050,23 @@ if __name__ == '__main__':
 
     # print(processed)  
 
-    process_health_insurance()
+    # process_health_insurance(1)
+
+
+    granularity = 5
+
+    client = InfluxDBClient(host='live2.phisaver.com', database='phisaver', username='reader', password='Rmagine!', port=8086, headers={'Accept': 'application/json'}, gzip=True)
+    microwave_dataframes = get_data_in_period(client, "'2020-07-01T00:00:00Z'", "'2020-08-01T00:00:00Z'", "'uq10'", "'Powerpoints1'")
+ 
+    microwave_processed = pre_process(microwave_dataframes, granularity)
+    for df in microwave_processed:
+        microwave_peaks = get_peaks(df, 600, 1200, 1, 10, 2, granularity)
+        pp.pprint(microwave_peaks)
+    
+    
+
+        
+
 
     # end = datetime.datetime.now()
 
