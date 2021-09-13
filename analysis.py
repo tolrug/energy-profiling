@@ -143,9 +143,9 @@ def get_peaks(data: pd.Series, min_power: int, max_power: int, min_required_dura
             next_idx = i+1
             climb_start_idx = 0
             peak_idx = 0
-            # if i == 330:
+            # if i == 19200:
             #     print(data.index[i])
-            if (data.iloc[curr_idx] - data.iloc[prev_idx] > 200): # could be the start of a peak
+            if (data.iloc[curr_idx] - data.iloc[prev_idx] > 50): # could be the start of a peak
                 climb_start_idx = prev_idx # mark start of climb...
                 peak_idx = curr_idx
                 while(True):
@@ -185,7 +185,7 @@ def get_peaks(data: pd.Series, min_power: int, max_power: int, min_required_dura
                                 next_idx+=1
                                 continue
                             if (peak_duration >= min_required_duration):
-                                peaks.append((data.index[climb_start_idx], data.iloc[peak_idx] - data.iloc[climb_start_idx], round(peak_duration)))
+                                peaks.append((data.index[peak_idx], data.iloc[peak_idx] - data.iloc[climb_start_idx], round(peak_duration)))
                         break
             i = next_idx
         except IndexError:
@@ -637,8 +637,13 @@ def get_most_recent_time(df):
 # Apply a certain level of granularity over the data
 # Default was 5sec == 1/12min == 0.0833min
 def apply_granularity(df: pd.DataFrame, granularity: int) -> pd.DataFrame:
-    default_granularity = 1/12  # 5sec or 10sec
-    df = df.resample('{}min'.format(int(round(12 * granularity * default_granularity)))).mean()
+    default_granularity = 1/12  # 5sec (for hfs01a) or 10sec (for others e.g. uqXX)
+    if (granularity == 1/12):
+        df = df.resample('5S').mean()
+    elif (granularity == 1/6):
+        df = df.resample('10S').mean()
+    else:
+        df = df.resample('{}min'.format(int(round(12 * granularity * default_granularity)))).mean()
     return df
 
 # Example usage of iteratively calling the InfluxDB
@@ -668,10 +673,10 @@ def pre_process(dataframes, granularity = 1/12): #granularity in mins = 1/12 min
         df = df.set_index(pd.to_datetime(df.index))
         df = df.loc[:, "Watts"]
         df = df.to_frame()
-        if (granularity >= 1):
-            k = int(round(12 * granularity))
+        # if (granularity >= 1/12):
+            # k = int(round(12 * granularity))
             # idx = df.index[::k]
-            df = apply_granularity(df, granularity)
+        df = apply_granularity(df, granularity)
             # if (df.size != len(idx)):
             #     df = df.drop(df.tail(df.size - len(idx)).index)
             
@@ -2049,43 +2054,62 @@ if __name__ == '__main__':
     # process_health_insurance(1)
 
 
-    granularities = [1/6, 1, 5]
-    granularities_str = ["10sec", "1min", "5mins"]
+    granularities = [1/6, 1, 5, 15, 60]
+    granularities_str = ["10sec", "1min", "5min", "15min", "1h"]
+    title = "Aircon"
+    household = 'hfs01a'
+    circuit = 'Aircon1'
+    start = '2021-09-04T00:00:00Z'
+    end = '2021-09-11T00:00:00Z'
+    min_power = 800
+    max_power = 3500
+    min_duration = 1
+    max_duration = 360
+    off_requirement = 30
 
     client = InfluxDBClient(host='live2.phisaver.com', database='phisaver', username='reader', password='Rmagine!', port=8086, headers={'Accept': 'application/json'}, gzip=True)
-    dataframes = get_data_in_period(client, "'2021-09-01T00:00:00Z'", "'2021-09-08T00:00:00Z'", "'hfs01a'", "'Power1'")
-    fig, axs = plt.subplots(3, figsize=(13, 8), sharey=True, tight_layout=True)
+    dataframes = get_data_in_period(client, "'{}'".format(start), "'{}'".format(end), "'{}'".format(household), "'{}'".format(circuit))
+    fig, axs = plt.subplots(len(granularities), figsize=(14, 8), sharey=True, tight_layout=True)
 
     for i in range(len(granularities)):
         print("Processing granularity: {}".format(granularities_str[i]))
         processed = pre_process(dataframes, granularities[i])
         for df in processed:
-            # microwave_peaks = get_peaks(df, 600, 1200, 1, 10, 2, granularity)
-            # pp.pprint(microwave_peaks)
-            dishwasher_peaks = get_peaks(df, 1800, 2400, 1, 120, 2, granularities[i])
-            dishwasher_peaks_dates = [i[0] for i in dishwasher_peaks]
-            dishwasher_peaks_values = [i[1] for i in dishwasher_peaks]
+            peaks = get_peaks(df, min_power, max_power, min_duration, max_duration, off_requirement, granularities[i])
+            peaks_dates = [i[0] for i in peaks]
+            peaks_values = [i[1] for i in peaks]
 
             x = [i for i in df.index.tolist()]
             y = [i for i in df.values.tolist()]
 
-            axs[i].axhline(y=2400, color='c', linestyle='--', label="Upper bound")
-            axs[i].axhline(y=1800, color='g', linestyle='--', label="Lower bound")
+            axs[i].axhline(y=max_power, color='c', linestyle='--', label="Upper bound")
+            axs[i].axhline(y=min_power, color='g', linestyle='--', label="Lower bound")
 
             locs = list(range(0, len(x), round(len(x)/7)))
             labels = [datetime.datetime.strptime(x[i], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d") for i in locs]
             plt.sca(axs[i])
             plt.xticks(locs, labels)
 
-            axs[i].plot(x, y, label="Power Circuit Data")
-            axs[i].scatter(dishwasher_peaks_dates, dishwasher_peaks_values, c="r", marker='x', label="Peaks Detected: ({})".format(granularities_str[i]))
+            axs[i].plot(x, y, label="Circuit Data", zorder=1)
+            axs[i].scatter(peaks_dates, peaks_values, c="r", marker='x', label="Peaks Detected", zorder=2)
+            axs[i].text(0.5, 1.03, "{}".format(granularities_str[i]), transform=axs[i].transAxes, ha="center")
 
-            axs[i].legend(loc=1)
-            axs[i].text(0.1, 0.75, "{} peaks".format(len(dishwasher_peaks)), transform=axs[i].transAxes)
+            # axs[i].legend(loc=1)
+            axs[i].text(0.1, 0.75, "{} peaks".format(len(peaks)), transform=axs[i].transAxes)
 
             axs[i].margins(x=0)
 
-    fig.suptitle("Detection of Dishwasher Usage with Data of Varying Granularity (mean aggregation)")
+
+    axs[0].legend(loc=1)
+    for i in range(len(axs)-1):
+        axs[i].set_xticks([])
+    plt.subplots_adjust(wspace=0, hspace=0)
+    plt.subplots_adjust(bottom=0.5)
+    plt.tight_layout()
+
+    fig.suptitle("Detection of {} Usage with Data of Varying Granularity (mean aggregation)".format(title))
+    fig.text(0.5, 0, 'Time', ha='center')
+    fig.text(0, 0.5, 'Power (Watts)', va='center', rotation='vertical')
     print("Generating plots...")   
     plt.show()
 
