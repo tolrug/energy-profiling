@@ -143,9 +143,9 @@ def get_peaks(data: pd.Series, min_power: int, max_power: int, min_required_dura
             next_idx = i+1
             climb_start_idx = 0
             peak_idx = 0
-            # if i == 19200:
+            # if granularity == 1 and i > 2000 and i < 2050:
             #     print(data.index[i])
-            if (data.iloc[curr_idx] - data.iloc[prev_idx] > 50): # could be the start of a peak
+            if (data.iloc[curr_idx] - data.iloc[prev_idx] > 100): # could be the start of a peak
                 climb_start_idx = prev_idx # mark start of climb...
                 peak_idx = curr_idx
                 while(True):
@@ -2135,7 +2135,7 @@ def gen_subplots_for_microwave():
             axs[i].axhline(y=min_power, color='g', linestyle='--', label="Lower bound")
 
             locs = list(range(0, len(x), round(len(x)/5))) # Maybe just set the xticks to be whenener it is midnight on a given day.
-            labels = [datetime.datetime.strptime(x[i], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d %H") for i in locs]
+            labels = [datetime.datetime.strptime(x[i], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d %Hh") for i in locs]
             plt.sca(axs[i])
             plt.xticks(locs, labels)
 
