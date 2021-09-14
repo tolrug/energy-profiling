@@ -2041,19 +2041,8 @@ def cold_sensitivity(correlations):
     print()
     return ranks
 
-# Main function
-if __name__ == '__main__':
-    # start = datetime.datetime.now()
 
-    # Call your process_{metric}() function here
-    # data = get_data_in_period(client, "'2020-06-01T00:00:00Z'", "'2020-06-30T00:00:00Z'", "'hfs01a'", "'Lights2'")   
-    # processed = pre_process(data, 5)      
-
-    # print(processed)  
-
-    # process_health_insurance(1)
-
-
+def gen_subplots_for_event():
     granularities = [1/6, 1, 5, 15, 60]
     granularities_str = ["10sec", "1min", "5min", "15min", "1h"]
     title = "Aircon"
@@ -2099,6 +2088,65 @@ if __name__ == '__main__':
 
             axs[i].margins(x=0)
 
+    axs[0].legend(loc=1)
+    for i in range(len(axs)-1):
+        axs[i].set_xticks([])
+    plt.subplots_adjust(wspace=0, hspace=0)
+    plt.subplots_adjust(bottom=0.5)
+    plt.tight_layout()
+
+    fig.suptitle("Detection of {} Usage with Data of Varying Granularity (mean aggregation)".format(title))
+    fig.text(0.5, 0, 'Time', ha='center')
+    fig.text(0, 0.5, 'Power (Watts)', va='center', rotation='vertical')
+    print("Generating plots...")   
+    plt.show()
+
+
+def gen_subplots_for_microwave():
+    granularities = [1/6, 1, 5, 15, 60]
+    granularities_str = ["10sec", "1min", "5min", "15min", "1h"]
+    title = "Microwave"
+    household = 'hfs01a'
+    circuit = 'Power1'
+    start = '2021-09-08T00:00:00Z'
+    end = '2021-09-11T00:00:00Z'
+    min_power = 600
+    max_power = 1200
+    min_duration = 1
+    max_duration = 10
+    off_requirement = 5
+
+    client = InfluxDBClient(host='live2.phisaver.com', database='phisaver', username='reader', password='Rmagine!', port=8086, headers={'Accept': 'application/json'}, gzip=True)
+    dataframes = get_data_in_period(client, "'{}'".format(start), "'{}'".format(end), "'{}'".format(household), "'{}'".format(circuit))
+    fig, axs = plt.subplots(len(granularities), figsize=(14, 8), sharey=True, tight_layout=True)
+
+    for i in range(len(granularities)):
+        print("Processing granularity: {}".format(granularities_str[i]))
+        processed = pre_process(dataframes, granularities[i])
+        for df in processed:
+            peaks = get_peaks(df, min_power, max_power, min_duration, max_duration, off_requirement, granularities[i])
+            peaks_dates = [i[0] for i in peaks]
+            peaks_values = [i[1] for i in peaks]
+
+            x = [i for i in df.index.tolist()]
+            y = [i for i in df.values.tolist()]
+
+            axs[i].axhline(y=max_power, color='c', linestyle='--', label="Upper bound")
+            axs[i].axhline(y=min_power, color='g', linestyle='--', label="Lower bound")
+
+            locs = list(range(0, len(x), round(len(x)/5))) # Maybe just set the xticks to be whenener it is midnight on a given day.
+            labels = [datetime.datetime.strptime(x[i], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d %H") for i in locs]
+            plt.sca(axs[i])
+            plt.xticks(locs, labels)
+
+            axs[i].plot(x, y, label="Circuit Data", zorder=1)
+            axs[i].scatter(peaks_dates, peaks_values, c="r", marker='x', label="Peaks Detected", zorder=2)
+            axs[i].text(0.5, 1.03, "{}".format(granularities_str[i]), transform=axs[i].transAxes, ha="center")
+
+            # axs[i].legend(loc=1)
+            axs[i].text(0.1, 0.75, "{} peaks".format(len(peaks)), transform=axs[i].transAxes)
+
+            axs[i].margins(x=0)
 
     axs[0].legend(loc=1)
     for i in range(len(axs)-1):
@@ -2113,27 +2161,11 @@ if __name__ == '__main__':
     print("Generating plots...")   
     plt.show()
 
-    # Peaks per aggregation function per granularity (10sec, 1min, 5mins)
-    # mean():   78, 43, 20
-    # max():    77, 54, 32
-    # first():  77, 59, 38
+# Main function
+if __name__ == '__main__':
+    # start = datetime.datetime.now()
 
-
-
-
-
-
-
-    # TODO
-    # 1. Figure out best way to down-sample data (mean, max, first)
-    # 2. Figure out which "events" to analyse
-    # 3. Figure out a way to determine the number of "events" per household per time-period
-    # 4. Figure out a way to measure the accuracy of detecting "events" per granularity
-    # 5. Figure out a nice way to graph/tabulate the accuracies   
-    
-
-        
-
+    gen_subplots_for_microwave()
 
     # end = datetime.datetime.now()
 
