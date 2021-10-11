@@ -1128,7 +1128,6 @@ def normalise_and_rank(ranks, names):
     try:
         pp.pprint(list(values.values()))
     except AttributeError:
-        print('here')
         print(list(values.values()))
     return values
 
@@ -1508,8 +1507,6 @@ def process_health_insurance(granularity=1/12): #granularity is in mins
         for val in stove_peaks:
             stovetop_normalised.append(normalise(val, min(stove_peaks), max(stove_peaks)))
         
-        exit()
-
         # Light Data
         print("Getting lights data")
         light_dataframes = []
