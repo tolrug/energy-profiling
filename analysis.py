@@ -574,24 +574,24 @@ power_circuits = {
 
 stove_circuits = {  
                     "uq10": "Oven",
-                    # "uq12": "Stove",
-                    # "uq23": "Stove",
-                    # "uq24": "OvenHob",
-                    # "uq26": "Stove",
-                    # "uq33": "Stove",
-                    # "uq37": "Hotplate",
-                    # "uq45": "Oven",
-                    # "uq48": "Hotplates",
-                    # "uq49": "Hob",
-                    # "uq56": "Oven",
-                    # "uq57": "Oven",
-                    # "uq61": "Oven",
-                    # "uq67": "Stove", 
-                    # "uq68": "Hotplate",
-                    # "uq75": "Hob",
-                    # "uq85": "HotPlateOven",
-                    # "uq88": "Oven",
-                    # "uq92": "Stove",
+                    "uq12": "Stove",
+                    "uq23": "Stove",
+                    "uq24": "OvenHob",
+                    "uq26": "Stove",
+                    "uq33": "Stove",
+                    "uq37": "Hotplate",
+                    "uq45": "Oven",
+                    "uq48": "Hotplates",
+                    "uq49": "Hob",
+                    "uq56": "Oven",
+                    "uq57": "Oven",
+                    "uq61": "Oven",
+                    "uq67": "Stove", 
+                    "uq68": "Hotplate",
+                    "uq75": "Hob",
+                    "uq85": "HotPlateOven",
+                    "uq88": "Oven",
+                    "uq92": "Stove",
                     "hfs01a": "Hotplate"
                 }
 
@@ -639,11 +639,11 @@ def get_most_recent_time(df):
 def apply_granularity(df: pd.DataFrame, granularity: int) -> pd.DataFrame:
     default_granularity = 1/12  # 5sec (for hfs01a) or 10sec (for others e.g. uqXX)
     if (granularity == 1/12):
-        df = df.resample('5S').mean()
+        df = df.resample('5S').max()
     elif (granularity == 1/6):
-        df = df.resample('10S').mean()
+        df = df.resample('10S').max()
     else:
-        df = df.resample('{}min'.format(int(round(12 * granularity * default_granularity)))).mean()
+        df = df.resample('{}min'.format(int(round(12 * granularity * default_granularity)))).max()
     return df
 
 # Example usage of iteratively calling the InfluxDB
@@ -2165,7 +2165,21 @@ def gen_subplots_for_microwave():
 if __name__ == '__main__':
     # start = datetime.datetime.now()
 
-    gen_subplots_for_microwave()
+    # gen_subplots_for_microwave()
+    household = 'hfs01a'
+    circuit = 'Power1'
+    start = '2021-09-08T00:00:00Z'
+    end = '2021-09-11T00:00:00Z'
+
+    client = InfluxDBClient(host='54.253.86.187', database='phisaver', username='reader', password='Rmagine!', port=8086, headers={'Accept': 'application/json'}, gzip=True)
+
+    dataframes = []
+    dataframes.append(get_data_in_period(client, "'{}'".format(start), "'{}'".format(end), "'{}'".format(household), "'{}'".format(circuit)))
+
+    processed = pre_process(dataframes)
+
+
+    pp.pprint(processed)
 
     # end = datetime.datetime.now()
 
