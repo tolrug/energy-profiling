@@ -26,6 +26,12 @@ pd.set_option('display.max_rows', 100)
 from numpy.random import seed
 from scipy.stats import pearsonr
 
+HOST = '54.253.86.187'
+DATABASE = 'phisaver'
+USERNAME = 'reader'
+PASSWORD = 'Rmagine!'
+PORT = 8086
+
 
 # Example: Loads data from the "Power1" circuit from a file downloaded from the PhiSaver website.
 # df = pd.read_csv("data/steve-mar-2021.csv", sep=';', index_col=0, dtype=object)
@@ -132,8 +138,12 @@ def isInRange(peak_value: int, trough_value: int, min_power: int, max_power: int
 # Returns a series of tuples of shape: (peak_start_time, peak_max_value, peak_duration),
 # where each peak is within the range specified, finishes within the specified duration, and 
 # is off for at least off_requirement minutes after the peak
-def get_peaks(data: pd.Series, min_power: int, max_power: int, min_required_duration: int = 0, max_required_duration: int = sys.maxsize, off_requirement: int = 0, granularity: int = 1/12) -> List[Tuple[str, int, int]]:
+def get_peaks(data: pd.Series, min_power: int, max_power: int, min_required_duration: int = 0, max_required_duration: int = sys.maxsize, off_requirement: int = 0, granularity: int = 1/12, isDemoOne = False) -> List[Tuple[str, int, int]]:
     i = 1
+    start = 10 if isDemoOne else 100
+    rising = 10 if isDemoOne else 100
+    close = 10 if isDemoOne else 150
+    trough = 10 if isDemoOne else 100
     peaks = []
     while i < len(data):
         peak_duration = granularity # +1 tick for the initial turning on
@@ -145,7 +155,7 @@ def get_peaks(data: pd.Series, min_power: int, max_power: int, min_required_dura
             peak_idx = 0
             # if granularity == 1 and i > 2000 and i < 2050:
             #     print(data.index[i])
-            if (data.iloc[curr_idx] - data.iloc[prev_idx] > 100): # could be the start of a peak
+            if (data.iloc[curr_idx] - data.iloc[prev_idx] > start): # could be the start of a peak
                 climb_start_idx = prev_idx # mark start of climb...
                 peak_idx = curr_idx
                 while(True):
@@ -157,12 +167,12 @@ def get_peaks(data: pd.Series, min_power: int, max_power: int, min_required_dura
                         if (data.iloc[curr_idx] > data.iloc[peak_idx]):
                             peak_idx=curr_idx
                         peak_duration += granularity
-                    elif (abs(data.iloc[next_idx] - data.iloc[curr_idx]) < 100): # not rising but still at the same peak
+                    elif (abs(data.iloc[next_idx] - data.iloc[curr_idx]) < rising): # not rising but still at the same peak
                         curr_idx+=1
                         prev_idx+=1
                         next_idx+=1
                         peak_duration += granularity
-                    elif (data.iloc[next_idx] > data.iloc[climb_start_idx] + 150): # not at (close enough to) being a trough yet
+                    elif (data.iloc[next_idx] > data.iloc[climb_start_idx] + close): # not at (close enough to) being a trough yet
                         curr_idx+=1
                         prev_idx+=1
                         next_idx+=1
@@ -172,7 +182,7 @@ def get_peaks(data: pd.Series, min_power: int, max_power: int, min_required_dura
                             isInRange(data.iloc[peak_idx], data.iloc[climb_start_idx], min_power, max_power)):
                             satisfied_off_requirement = True
                             while (curr_off_duration > 0):
-                                if (data.iloc[next_idx+1] > data.iloc[next_idx] + 100): # hasn't been a trough for long enough
+                                if (data.iloc[next_idx+1] > data.iloc[next_idx] + trough): # hasn't been a trough for long enough
                                     satisfied_off_requirement = False
                                     break
                                 curr_off_duration -= granularity
@@ -356,6 +366,12 @@ def load_bom_data(filename: str) -> List[int]:
         data.append([int(float(month.iloc[j])) if month.iloc[j] != "NaN" else True for j in range(len(month))])
     return data
 
+def load_bom_data(filename: str, isHigh: bool) -> List[int]:
+    data = pd.read_csv(filename, sep=',', index_col=0, dtype=object)
+    data_col = data.iloc[:, 1] if isHigh else data.iloc[:, 0]
+    temps = [int(float(data_col.iloc[i])) for i in range(len(data_col))]
+    return temps
+
 # Example usage
 # mar_2021 = load_bom_data("data/extra/bom-mar-2021.csv", True)
 # dec_2020 = load_bom_data("data/extra/bom-dec-2020.csv", True)
@@ -381,6 +397,8 @@ def load_bom_data(filename: str) -> List[int]:
 # TODO: Consider using another metric for heat sensitivity
 def plot_aircon_trend(usage_series: pd.Series, temps: List[int], s_type: str):
     usage = usage_series.tolist()
+    print(temps)
+    print(usage)
     x_ticks = [i for i in range(len(usage)) if i % 4 == 0]
     x_ticklabels = [usage_series.index[i].strftime("%Y/%m/%d") for i in x_ticks]
 
@@ -492,15 +510,22 @@ def plot_probs_combined(min_temps_winter: List[int], usage_series_winter: pd.Ser
     all_temps = np.arange(min(min_temps_winter), max(max_temps_summer)+1, 1)
     all_probs = [0.0] * len(all_temps)
     
-    i=0
+    i = 0
     while (i < len(winter_probs)):
         all_probs[i] = winter_probs[i]
         i+=1
 
+    print(summer_probs)
+    print(winter_probs)
+    print(all_probs)
+
     j = len(all_probs) - len(summer_probs)
+    i = 0
     while (j < len(all_probs)):
-        all_probs[j] = summer_probs[j-len(summer_probs)-1]
+        print(j)
+        all_probs[j] = summer_probs[i]
         j+=1
+        i+=1
         
     interpolated = pd.Series(all_probs).interpolate().values.ravel().tolist()
     
@@ -520,7 +545,7 @@ def plot_probs_combined(min_temps_winter: List[int], usage_series_winter: pd.Ser
 # plot_probs_combined(min_temps_winter, usage_series_winter, max_temps_summer, usage_series_summer)
 
 
-# ------------ DATABASE INTERACTIONS START HERE ------------ #
+# ------------ DYNAMIC DATABASE INTERACTIONS START HERE ------------ #
 
 # client = InfluxDBClient(host='live2.phisaver.com', database='phisaver', username='reader', password='Rmagine!', port=8086, headers={'Accept': 'application/json'}, gzip=True)
 
@@ -636,14 +661,32 @@ def get_most_recent_time(df):
 
 # Apply a certain level of granularity over the data
 # Default was 5sec == 1/12min == 0.0833min
-def apply_granularity(df: pd.DataFrame, granularity: int) -> pd.DataFrame:
+def apply_granularity(df: pd.DataFrame, granularity: int, agg_method = 'mean') -> pd.DataFrame:
     default_granularity = 1/12  # 5sec (for hfs01a) or 10sec (for others e.g. uqXX)
-    if (granularity == 1/12):
-        df = df.resample('5S').max()
-    elif (granularity == 1/6):
-        df = df.resample('10S').max()
+    if agg_method == 'mean':
+        if (granularity == 1/12):
+            df = df.resample('5S').mean()
+        elif (granularity == 1/6):
+            df = df.resample('10S').mean()
+        else:
+            df = df.resample('{}min'.format(int(round(12 * granularity * default_granularity)))).mean()
+    elif agg_method == 'max':
+        if (granularity == 1/12):
+            df = df.resample('5S').max()
+        elif (granularity == 1/6):
+            df = df.resample('10S').max()
+        else:
+            df = df.resample('{}min'.format(int(round(12 * granularity * default_granularity)))).max()
+    elif agg_method == 'first':
+        if (granularity == 1/12):
+            df = df.resample('5S').first()
+        elif (granularity == 1/6):
+            df = df.resample('10S').first()
+        else:
+            df = df.resample('{}min'.format(int(round(12 * granularity * default_granularity)))).first()
     else:
-        df = df.resample('{}min'.format(int(round(12 * granularity * default_granularity)))).max()
+        raise Exception("Aggregation method was none of: ['mean', 'max', 'first']")
+
     return df
 
 # Example usage of iteratively calling the InfluxDB
@@ -653,7 +696,7 @@ def apply_granularity(df: pd.DataFrame, granularity: int) -> pd.DataFrame:
 
 # After retrieving bulk data from the db, call this function.
 # It will call the process_row() function and return a list of DF's
-def pre_process(dataframes, granularity = 1/12): #granularity in mins = 1/12 mins = 0.0833 mins = 5 seconds = default granularity of db
+def pre_process(dataframes, granularity = 1/12, agg_method = 'mean'): #granularity in mins = 1/12 mins = 0.0833 mins = 5 seconds = default granularity of db
     post_process = []
     if (not isinstance(dataframes, list)):
         new_df = []
@@ -673,32 +716,10 @@ def pre_process(dataframes, granularity = 1/12): #granularity in mins = 1/12 min
         df = df.set_index(pd.to_datetime(df.index))
         df = df.loc[:, "Watts"]
         df = df.to_frame()
-        # if (granularity >= 1/12):
-            # k = int(round(12 * granularity))
-            # idx = df.index[::k]
-        df = apply_granularity(df, granularity)
-            # if (df.size != len(idx)):
-            #     df = df.drop(df.tail(df.size - len(idx)).index)
+        df = apply_granularity(df, granularity, agg_method)
             
         df.index = [(datetime.datetime.strptime(x.tz_localize(None).strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S') + datetime.timedelta(hours=10)).strftime('%Y-%m-%dT%H:%M:%SZ') for x in df.index]
 
-            # to_append = to_append.set_index('time')
-            # to_append = to_append.set_index(pd.to_datetime(to_append.index))
-            # to_append = to_append.loc[:, "Watts"]
-            # to_append = to_append.to_frame()
-            # if (granularity >= 1):
-            #     k = int(round(12 * granularity))
-            #     idx = to_append.index[::k]
-            #     print('INDEX: ', idx)
-            #     to_append = apply_granularity(to_append, granularity)
-            #     if (to_append.size != len(idx)):
-            #         to_append = to_append.drop(to_append.tail(to_append.size - len(idx)).index)
-                
-            # to_append.index = [(datetime.datetime.strptime(x.tz_localize(None).strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S') + datetime.timedelta(hours=10)).strftime('%Y-%m-%dT%H:%M:%SZ') for x in to_append.index]
-            # pp.pprint(to_append)
-            
-            # df = df.append(to_append)
-        
         processing = process_row(df.squeeze())
 
         post_process.append(processing)
@@ -884,14 +905,16 @@ def compareTime(first, second):
 
 # Get spikes (Watts greater than houses resting power use)
 # of less than 30 mins in duration between their circadian rhythm times.
-def get_sleep_disturbances(data):
+def get_sleep_disturbances(data, isDemoOne = False):
     sleep_disturbances = []
     for household in data:
-        curr_disturbances = get_peaks(household, 5, 1000, 1, 30, 60)
+        curr_disturbances = get_peaks(household, 5, 1000, 1, 30, 60, 1, isDemoOne) # granularity
         try:
             circadian_rhythm = get_circadian_rhythm(household)
+            print(circadian_rhythm)
             curr_disturbances = [peak for peak in curr_disturbances if compareTime(peak[0][11:], circadian_rhythm[0]) < 0 or compareTime(peak[0][11:], circadian_rhythm[1]) > 0]
             sleep_disturbances.append(curr_disturbances)
+            pp.pprint(sleep_disturbances[0])
         except ZeroDivisionError:
             sleep_disturbances.append(-1)
 
@@ -2053,7 +2076,7 @@ def gen_subplots_for_event():
     max_duration = 360
     off_requirement = 30
 
-    client = InfluxDBClient(host='live2.phisaver.com', database='phisaver', username='reader', password='Rmagine!', port=8086, headers={'Accept': 'application/json'}, gzip=True)
+    client = InfluxDBClient(host=HOST, database=DATABASE, username=USERNAME, password=PASSWORD, port=PORT, headers={'Accept': 'application/json'}, gzip=True)
     dataframes = get_data_in_period(client, "'{}'".format(start), "'{}'".format(end), "'{}'".format(household), "'{}'".format(circuit))
     fig, axs = plt.subplots(len(granularities), figsize=(14, 8), sharey=True, tight_layout=True)
 
@@ -2099,7 +2122,7 @@ def gen_subplots_for_event():
     plt.show()
 
 
-def gen_subplots_for_microwave():
+def gen_subplots_for_microwave(agg_method = 'mean'):
     granularities = [1/6, 1, 5, 15, 60]
     granularities_str = ["10sec", "1min", "5min", "15min", "1h"]
     title = "Microwave"
@@ -2113,13 +2136,13 @@ def gen_subplots_for_microwave():
     max_duration = 10
     off_requirement = 5
 
-    client = InfluxDBClient(host='live2.phisaver.com', database='phisaver', username='reader', password='Rmagine!', port=8086, headers={'Accept': 'application/json'}, gzip=True)
+    client = InfluxDBClient(host=HOST, database=DATABASE, username=USERNAME, password=PASSWORD, port=PORT, headers={'Accept': 'application/json'}, gzip=True)
     dataframes = get_data_in_period(client, "'{}'".format(start), "'{}'".format(end), "'{}'".format(household), "'{}'".format(circuit))
     fig, axs = plt.subplots(len(granularities), figsize=(14, 8), sharey=True, tight_layout=True)
 
     for i in range(len(granularities)):
-        print("Processing granularity: {}".format(granularities_str[i]))
-        processed = pre_process(dataframes, granularities[i])
+        print("Processing plot for granularity: {}".format(granularities_str[i]))
+        processed = pre_process(dataframes, granularities[i], agg_method)
         for df in processed:
             peaks = get_peaks(df, min_power, max_power, min_duration, max_duration, off_requirement, granularities[i])
             peaks_dates = [i[0] for i in peaks]
@@ -2152,38 +2175,172 @@ def gen_subplots_for_microwave():
     plt.subplots_adjust(bottom=0.5)
     plt.tight_layout()
 
-    fig.suptitle("Detection of {} Usage with Data of Varying Granularity (mean aggregation)".format(title))
+    fig.suptitle("Detection of {} Usage with Data of Varying Granularity ({} aggregation)".format(title, agg_method))
     fig.text(0.5, 0, 'Time', ha='center')
     fig.text(0, 0.5, 'Power (Watts)', va='center', rotation='vertical')
     print("Generating plots...")   
     plt.show()
 
+
+def demo_one():
+    household = 'uq10'
+    circuit = 'Lights1'
+    start = '2020-11-01T00:00:00Z'
+    end = '2020-12-01T00:00:00Z'
+
+    client = InfluxDBClient(host=HOST, database=DATABASE, username=USERNAME, password=PASSWORD, port=PORT, headers={'Accept': 'application/json'}, gzip=True)
+    dataframes = get_data_in_period(client, "'{}'".format(start), "'{}'".format(end), "'{}'".format(household), "'{}'".format(circuit))
+
+    print("Processing light circuit data...")
+    light_processed = pre_process(dataframes, 1) # can change granularity here
+
+    print("Calculating sleep disturbances...")
+    pp.pprint(light_processed)
+    sleep_disturbances = get_sleep_disturbances(light_processed, True)
+
+    pp.pprint("Number of sleep disturbances for this period is: {}".format(sleep_disturbances[0]))
+
+    # Then, we can normalise against other households etc...
+
+
+def demo_two():
+    mar_2021 = load_bom_data("data/extra/bom-mar-2021.csv", True)
+    dec_2020 = load_bom_data("data/extra/bom-dec-2020.csv", True)
+    jan_2021 = load_bom_data("data/extra/bom-jan-2021.csv", True)
+    feb_2021 = load_bom_data("data/extra/bom-feb-2021.csv", True)
+    max_temps_summer = jan_2021
+
+    jun_2020 = load_bom_data("data/extra/bom-jun-2020.csv", False)
+    jul_2020 = load_bom_data("data/extra/bom-jul-2020.csv", False)
+    aug_2020 = load_bom_data("data/extra/bom-aug-2020.csv", False)
+    min_temps_winter = jul_2020
+
+    household = 'hfs01a'
+    circuit = 'Aircon1'
+    winter_start = '2020-07-01T00:00:00Z'
+    winter_end = '2020-07-31T00:00:00Z'
+    summer_start = '2021-01-01T00:00:00Z'
+    summer_end = '2021-01-31T00:00:00Z'
+
+    client = InfluxDBClient(host=HOST, database=DATABASE, username=USERNAME, password=PASSWORD, port=PORT, headers={'Accept': 'application/json'}, gzip=True)
+
+
+
+    winter_dataframes = get_data_in_period(client, "'{}'".format(winter_start), "'{}'".format(winter_end), "'{}'".format(household), "'{}'".format(circuit))
+
+    print("Processing aircon circuit data...")
+    aircon_winter = pre_process(winter_dataframes, 1) # can change granularity here
+
+    print("Getting peaks...")
+    aircon_peaks_winter = get_peaks(aircon_winter[0], 100, 10000, 1, 600, 60, 1)
+    pp.pprint(aircon_peaks_winter)
+
+
+
+    summer_dataframes = get_data_in_period(client, "'{}'".format(summer_start), "'{}'".format(summer_end), "'{}'".format(household), "'{}'".format(circuit))
+
+    print("Processing aircon circuit data...")
+    aircon_summer = pre_process(summer_dataframes, 1) # can change granularity here
+
+    print("Getting peaks...")
+    aircon_peaks_summer = get_peaks(aircon_summer[0], 100, 10000, 1, 600, 60, 1)
+    pp.pprint(aircon_peaks_summer)
+
+
+
+
+    watt_hours_winter = get_watt_hours(aircon_peaks_winter, aircon_winter[0])
+    watt_hours_summer = get_watt_hours(aircon_peaks_summer, aircon_summer[0])
+
+    usage_series_winter = get_daily_usage(watt_hours_winter)
+    usage_series_summer = get_daily_usage(watt_hours_summer)
+
+    # plot_aircon_trend(usage_series, mar_2021, s_type="Max")
+    # plot_aircon_trend(usage_series_winter, min_temps_winter, s_type="Min")
+    # plot_aircon_trend(usage_series_summer, max_temps_summer, s_type="Max")
+
+    # get_probabilities(mar_2021, usage_series)
+
+    # plot_probability_curve(mar_2021, usage_series)
+    # plot_probability_curve(max_temps_summer, usage_series_summer)
+    # plot_probability_curve(min_temps_winter, usage_series_winter)
+
+
+    plot_probs_combined(min_temps_winter, usage_series_winter, max_temps_summer, usage_series_summer)
+
+
+def demo_two_longer():
+    mar_2021 = load_bom_data("data/extra/bom-mar-2021.csv", True)
+    dec_2020 = load_bom_data("data/extra/bom-dec-2020.csv", True)
+    jan_2021 = load_bom_data("data/extra/bom-jan-2021.csv", True)
+    feb_2021 = load_bom_data("data/extra/bom-feb-2021.csv", True)
+    max_temps_summer = jan_2021
+
+    jun_2020 = load_bom_data("data/extra/bom-jun-2020.csv", False)
+    jul_2020 = load_bom_data("data/extra/bom-jul-2020.csv", False)
+    aug_2020 = load_bom_data("data/extra/bom-aug-2020.csv", False)
+    min_temps_winter = jul_2020
+
+    household = 'hfs01a'
+    circuit = 'Aircon1'
+    winter_months_start = ['2020-06-01T00:00:00Z', '2020-07-01T00:00:00Z', '2020-08-01T00:00:00Z']
+    winter_months_end = ['2020-06-30T00:00:00Z', '2020-07-31T00:00:00Z', '2020-08-31T00:00:00Z']
+    summer_months_start = ['2020-12-01T00:00:00Z', '2021-01-01T00:00:00Z', '2021-02-01T00:00:00Z']
+    summer_months_end = ['2020-12-31T00:00:00Z', '2021-01-31T00:00:00Z', '2021-02-28T00:00:00Z']
+
+    client = InfluxDBClient(host=HOST, database=DATABASE, username=USERNAME, password=PASSWORD, port=PORT, headers={'Accept': 'application/json'}, gzip=True)
+
+    aircon_winter = []
+    aircon_peaks_winter = []
+    watt_hours_winter = []
+    for i in range(len(winter_months_start)):
+        df = get_data_in_period(client, "'{}'".format(winter_months_start[i]), "'{}'".format(winter_months_end[i]), "'{}'".format(household), "'{}'".format(circuit))
+
+        print("Processing aircon circuit data...")
+        aircon_winter += pre_process(df, 1) # can change granularity here
+        aircon_peaks_winter.append(get_peaks(aircon_winter[i], 100, 10000, 1, 600, 60, 1))
+        watt_hours_winter += get_watt_hours(aircon_peaks_winter[i], aircon_winter[i])
+
+
+    aircon_summer = []
+    aircon_peaks_summer = []
+    watt_hours_summer = []
+    for i in range(len(summer_months_start)):
+        df = get_data_in_period(client, "'{}'".format(summer_months_start[i]), "'{}'".format(summer_months_end[i]), "'{}'".format(household), "'{}'".format(circuit))
+
+        print("Processing aircon circuit data...")
+        aircon_summer += pre_process(df, 1) # can change granularity here
+        aircon_peaks_summer.append(get_peaks(aircon_summer[i], 100, 10000, 1, 600, 60, 1))
+        watt_hours_summer += get_watt_hours(aircon_peaks_summer[i], aircon_summer[i])
+
+
+    usage_series_winter = get_daily_usage(watt_hours_winter)
+    usage_series_summer = get_daily_usage(watt_hours_summer)
+
+    # plot_aircon_trend(usage_series, mar_2021, s_type="Max")
+    # plot_aircon_trend(usage_series_winter, min_temps_winter, s_type="Min")
+    # plot_aircon_trend(usage_series_summer, max_temps_summer, s_type="Max")
+
+    # get_probabilities(mar_2021, usage_series)
+
+    # plot_probability_curve(mar_2021, usage_series)
+    # plot_probability_curve(max_temps_summer, usage_series_summer)
+    # plot_probability_curve(min_temps_winter, usage_series_winter)
+
+    plot_probs_combined(min_temps_winter, usage_series_winter, max_temps_summer, usage_series_summer)
+
+
+
+def demo_three():
+    gen_subplots_for_microwave('mean')
+
+
+
 # Main function
 if __name__ == '__main__':
-    # start = datetime.datetime.now()
 
-    # gen_subplots_for_microwave()
-    household = 'hfs01a'
-    circuit = 'Power1'
-    start = '2021-09-08T00:00:00Z'
-    end = '2021-09-11T00:00:00Z'
-
-    client = InfluxDBClient(host='54.253.86.187', database='phisaver', username='reader', password='Rmagine!', port=8086, headers={'Accept': 'application/json'}, gzip=True)
-
-    dataframes = []
-    dataframes.append(get_data_in_period(client, "'{}'".format(start), "'{}'".format(end), "'{}'".format(household), "'{}'".format(circuit)))
-
-    processed = pre_process(dataframes)
-
-
-    pp.pprint(processed)
-
-    # end = datetime.datetime.now()
-
-    # print()
-    # print("Start: ", start)
-    # print("End: ", end)
-
-    # print("Time taken: {} minutes".format(end.time().minute - start.time().minute))
+    # demo_one()
+    demo_two()
+    # demo_three()
 
 # %%
