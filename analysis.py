@@ -2123,8 +2123,8 @@ def gen_subplots_for_event():
 
 
 def gen_subplots_for_microwave(agg_method = 'mean'):
-    granularities = [1/6, 1, 5, 15, 60]
-    granularities_str = ["10sec", "1min", "5min", "15min", "1h"]
+    granularities = [1, 5, 30]
+    granularities_str = ["1min", "5min", "30min"]
     title = "Microwave"
     household = 'hfs01a'
     circuit = 'Power1'
@@ -2195,7 +2195,6 @@ def demo_one():
     light_processed = pre_process(dataframes, 1) # can change granularity here
 
     print("Calculating sleep disturbances...")
-    pp.pprint(light_processed)
     sleep_disturbances = get_sleep_disturbances(light_processed, True)
 
     pp.pprint("Number of sleep disturbances for this period is: {}".format(sleep_disturbances[0]))
@@ -2204,15 +2203,10 @@ def demo_one():
 
 
 def demo_two():
-    mar_2021 = load_bom_data("data/extra/bom-mar-2021.csv", True)
-    dec_2020 = load_bom_data("data/extra/bom-dec-2020.csv", True)
     jan_2021 = load_bom_data("data/extra/bom-jan-2021.csv", True)
-    feb_2021 = load_bom_data("data/extra/bom-feb-2021.csv", True)
     max_temps_summer = jan_2021
 
-    jun_2020 = load_bom_data("data/extra/bom-jun-2020.csv", False)
     jul_2020 = load_bom_data("data/extra/bom-jul-2020.csv", False)
-    aug_2020 = load_bom_data("data/extra/bom-aug-2020.csv", False)
     min_temps_winter = jul_2020
 
     household = 'hfs01a'
@@ -2224,8 +2218,6 @@ def demo_two():
 
     client = InfluxDBClient(host=HOST, database=DATABASE, username=USERNAME, password=PASSWORD, port=PORT, headers={'Accept': 'application/json'}, gzip=True)
 
-
-
     winter_dataframes = get_data_in_period(client, "'{}'".format(winter_start), "'{}'".format(winter_end), "'{}'".format(household), "'{}'".format(circuit))
 
     print("Processing aircon circuit data...")
@@ -2234,8 +2226,6 @@ def demo_two():
     print("Getting peaks...")
     aircon_peaks_winter = get_peaks(aircon_winter[0], 100, 10000, 1, 600, 60, 1)
     pp.pprint(aircon_peaks_winter)
-
-
 
     summer_dataframes = get_data_in_period(client, "'{}'".format(summer_start), "'{}'".format(summer_end), "'{}'".format(household), "'{}'".format(circuit))
 
@@ -2246,18 +2236,15 @@ def demo_two():
     aircon_peaks_summer = get_peaks(aircon_summer[0], 100, 10000, 1, 600, 60, 1)
     pp.pprint(aircon_peaks_summer)
 
-
-
-
     watt_hours_winter = get_watt_hours(aircon_peaks_winter, aircon_winter[0])
     watt_hours_summer = get_watt_hours(aircon_peaks_summer, aircon_summer[0])
 
     usage_series_winter = get_daily_usage(watt_hours_winter)
     usage_series_summer = get_daily_usage(watt_hours_summer)
 
-    # plot_aircon_trend(usage_series, mar_2021, s_type="Max")
-    # plot_aircon_trend(usage_series_winter, min_temps_winter, s_type="Min")
-    # plot_aircon_trend(usage_series_summer, max_temps_summer, s_type="Max")
+    print("Plotting...")
+    plot_aircon_trend(usage_series_winter, min_temps_winter, s_type="Min")
+    plot_aircon_trend(usage_series_summer, max_temps_summer, s_type="Max")
 
     # get_probabilities(mar_2021, usage_series)
 
@@ -2265,21 +2252,19 @@ def demo_two():
     # plot_probability_curve(max_temps_summer, usage_series_summer)
     # plot_probability_curve(min_temps_winter, usage_series_winter)
 
-
     plot_probs_combined(min_temps_winter, usage_series_winter, max_temps_summer, usage_series_summer)
 
 
 def demo_two_longer():
-    mar_2021 = load_bom_data("data/extra/bom-mar-2021.csv", True)
     dec_2020 = load_bom_data("data/extra/bom-dec-2020.csv", True)
     jan_2021 = load_bom_data("data/extra/bom-jan-2021.csv", True)
     feb_2021 = load_bom_data("data/extra/bom-feb-2021.csv", True)
-    max_temps_summer = jan_2021
+    max_temps_summer = dec_2020 + jan_2021 + feb_2021
 
     jun_2020 = load_bom_data("data/extra/bom-jun-2020.csv", False)
     jul_2020 = load_bom_data("data/extra/bom-jul-2020.csv", False)
     aug_2020 = load_bom_data("data/extra/bom-aug-2020.csv", False)
-    min_temps_winter = jul_2020
+    min_temps_winter = jun_2020 + jul_2020 + aug_2020
 
     household = 'hfs01a'
     circuit = 'Aircon1'
@@ -2301,7 +2286,6 @@ def demo_two_longer():
         aircon_peaks_winter.append(get_peaks(aircon_winter[i], 100, 10000, 1, 600, 60, 1))
         watt_hours_winter += get_watt_hours(aircon_peaks_winter[i], aircon_winter[i])
 
-
     aircon_summer = []
     aircon_peaks_summer = []
     watt_hours_summer = []
@@ -2313,13 +2297,11 @@ def demo_two_longer():
         aircon_peaks_summer.append(get_peaks(aircon_summer[i], 100, 10000, 1, 600, 60, 1))
         watt_hours_summer += get_watt_hours(aircon_peaks_summer[i], aircon_summer[i])
 
-
     usage_series_winter = get_daily_usage(watt_hours_winter)
     usage_series_summer = get_daily_usage(watt_hours_summer)
 
-    # plot_aircon_trend(usage_series, mar_2021, s_type="Max")
-    # plot_aircon_trend(usage_series_winter, min_temps_winter, s_type="Min")
-    # plot_aircon_trend(usage_series_summer, max_temps_summer, s_type="Max")
+    plot_aircon_trend(usage_series_winter, min_temps_winter, s_type="Min")
+    plot_aircon_trend(usage_series_summer, max_temps_summer, s_type="Max")
 
     # get_probabilities(mar_2021, usage_series)
 
@@ -2340,7 +2322,8 @@ def demo_three():
 if __name__ == '__main__':
 
     # demo_one()
-    demo_two()
-    # demo_three()
+    # demo_two_longer()
+    # demo_two()
+    demo_three()
 
 # %%
