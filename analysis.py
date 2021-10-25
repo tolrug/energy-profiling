@@ -2125,16 +2125,16 @@ def gen_subplots_for_event():
 def gen_subplots_for_microwave(agg_method = 'mean'):
     granularities = [1, 5, 30]
     granularities_str = ["1min", "5min", "30min"]
-    title = "Microwave"
+    title = "Aircon"
     household = 'hfs01a'
-    circuit = 'Power1'
+    circuit = 'Aircon1'
     start = '2021-09-08T00:00:00Z'
     end = '2021-09-11T00:00:00Z'
-    min_power = 600
-    max_power = 1200
+    min_power = 800
+    max_power = 3500
     min_duration = 1
-    max_duration = 10
-    off_requirement = 5
+    max_duration = 360
+    off_requirement = 30
 
     client = InfluxDBClient(host=HOST, database=DATABASE, username=USERNAME, password=PASSWORD, port=PORT, headers={'Accept': 'application/json'}, gzip=True)
     dataframes = get_data_in_period(client, "'{}'".format(start), "'{}'".format(end), "'{}'".format(household), "'{}'".format(circuit))
@@ -2317,13 +2317,73 @@ def demo_three():
     gen_subplots_for_microwave('mean')
 
 
+def compare_agg_method():
+    methods = ['mean', 'max', 'first']
+    granularity = 5
+    title = "Aircon"
+    household = 'hfs01a'
+    circuit = 'Aircon1'
+    start = '2021-09-08T00:00:00Z'
+    end = '2021-09-11T00:00:00Z'
+    min_power = 800
+    max_power = 3500
+    min_duration = 1
+    max_duration = 360
+    off_requirement = 30
+
+    client = InfluxDBClient(host=HOST, database=DATABASE, username=USERNAME, password=PASSWORD, port=PORT, headers={'Accept': 'application/json'}, gzip=True)
+    dataframes = get_data_in_period(client, "'{}'".format(start), "'{}'".format(end), "'{}'".format(household), "'{}'".format(circuit))
+    fig, axs = plt.subplots(len(methods), figsize=(14, 8), sharey=True, tight_layout=True)
+
+    for i in range(len(methods)):
+        print("Processing plot for agg method: {}".format(methods[i]))
+        processed = pre_process(dataframes, granularity, methods[i])
+        for df in processed:
+            peaks = get_peaks(df, min_power, max_power, min_duration, max_duration, off_requirement, granularity)
+            peaks_dates = [i[0] for i in peaks]
+            peaks_values = [i[1] for i in peaks]
+
+            x = [i for i in df.index.tolist()]
+            y = [i for i in df.values.tolist()]
+
+            axs[i].axhline(y=max_power, color='c', linestyle='--', label="Upper bound")
+            axs[i].axhline(y=min_power, color='g', linestyle='--', label="Lower bound")
+
+            locs = list(range(0, len(x), round(len(x)/5))) # Maybe just set the xticks to be whenener it is midnight on a given day.
+            labels = [datetime.datetime.strptime(x[i], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d %Hh") for i in locs]
+            plt.sca(axs[i])
+            plt.xticks(locs, labels)
+
+            axs[i].plot(x, y, label="Circuit Data", zorder=1)
+            axs[i].scatter(peaks_dates, peaks_values, c="r", marker='x', label="Peaks Detected", zorder=2)
+            axs[i].text(0.5, 1.03, "{}".format(methods[i].capitalize()), transform=axs[i].transAxes, ha="center")
+
+            # axs[i].legend(loc=1)
+            axs[i].text(0.1, 0.75, "{} peaks".format(len(peaks)), transform=axs[i].transAxes)
+
+            axs[i].margins(x=0)
+
+    axs[0].legend(loc=1)
+    for i in range(len(axs)-1):
+        axs[i].set_xticks([])
+    plt.subplots_adjust(wspace=0, hspace=0)
+    plt.subplots_adjust(bottom=0.5)
+    plt.tight_layout()
+
+    fig.suptitle("Detection of {} Usage with Varying Aggregation Methods to Downsample Data ({}min granularity)".format(title, granularity))
+    fig.text(0.5, 0, 'Time', ha='center')
+    fig.text(0, 0.5, 'Power (Watts)', va='center', rotation='vertical')
+    print("Generating plots...")   
+    plt.show()
+
+
 
 # Main function
 if __name__ == '__main__':
 
     # demo_one()
-    # demo_two_longer()
     # demo_two()
     demo_three()
+    # compare_agg_method()
 
 # %%
