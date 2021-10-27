@@ -1596,7 +1596,7 @@ def process_health_insurance(granularity=1/12): #granularity is in mins
 
 # The main function for processing the outliers calculation. 
 # Iterating through the months of the sample, it reads from the db, calls the helper functions above, and ranks the households against each other.
-def process_outlier_check():
+def process_outlier_check(client):
     months = ['2020-08-01', '2020-09-01', '2020-10-01', '2020-11-01', '2020-12-01', '2021-01-01']
     
     outliers = {}
@@ -1608,7 +1608,7 @@ def process_outlier_check():
         print("Getting consumption data")
         consumption_dataframes = []
         for i, home in enumerate(power_circuits):
-            consumption_dataframes.append(get_data_in_period(client, "'{}T00:00:00Z'".format(months[j]), "'{}T00:00:00Z'".format(months[j+1]), "'{}'".format(home), "'{}'".format(power_circuits[home])))
+            consumption_dataframes.append(get_data_in_period(client, "'{}T00:00:00Z'".format(months[j]), "'{}T00:00:00Z'".format(months[j+1]), "'{}'".format(home), "'{}'".format('Consumption')))
         
         # Preprocessing
         print("Processing consumption data")
@@ -2123,18 +2123,19 @@ def gen_subplots_for_event():
 
 
 def gen_subplots_for_microwave(agg_method = 'mean'):
-    granularities = [1, 5, 30]
-    granularities_str = ["1min", "5min", "30min"]
-    title = "Aircon"
-    household = 'hfs01a'
-    circuit = 'Aircon1'
-    start = '2021-09-08T00:00:00Z'
-    end = '2021-09-11T00:00:00Z'
-    min_power = 800
-    max_power = 3500
-    min_duration = 1
-    max_duration = 360
-    off_requirement = 30
+    granularities = [1/6, 1, 5, 30]
+    granularities_str = ["10sec", "1min", "5min", "30mins"]
+    title = "Sleep Disturbances"
+    household = 'uq10'
+    circuit = 'Lights1'
+    start = '2020-09-04T00:00:00Z'
+    end = '2020-09-08T00:00:00Z'
+    min_power = 0
+    max_power = 1000
+    min_duration = 0
+    max_duration = 30
+    off_requirement = 60
+    short = True
 
     client = InfluxDBClient(host=HOST, database=DATABASE, username=USERNAME, password=PASSWORD, port=PORT, headers={'Accept': 'application/json'}, gzip=True)
     dataframes = get_data_in_period(client, "'{}'".format(start), "'{}'".format(end), "'{}'".format(household), "'{}'".format(circuit))
@@ -2144,15 +2145,15 @@ def gen_subplots_for_microwave(agg_method = 'mean'):
         print("Processing plot for granularity: {}".format(granularities_str[i]))
         processed = pre_process(dataframes, granularities[i], agg_method)
         for df in processed:
-            peaks = get_peaks(df, min_power, max_power, min_duration, max_duration, off_requirement, granularities[i])
+            peaks = get_peaks(df, min_power, max_power, min_duration, max_duration, off_requirement, granularities[i], short)
             peaks_dates = [i[0] for i in peaks]
             peaks_values = [i[1] for i in peaks]
 
             x = [i for i in df.index.tolist()]
             y = [i for i in df.values.tolist()]
 
-            axs[i].axhline(y=max_power, color='c', linestyle='--', label="Upper bound")
-            axs[i].axhline(y=min_power, color='g', linestyle='--', label="Lower bound")
+            # axs[i].axhline(y=max_power, color='c', linestyle='--', label="Upper bound")
+            # axs[i].axhline(y=min_power, color='g', linestyle='--', label="Lower bound")
 
             locs = list(range(0, len(x), round(len(x)/5))) # Maybe just set the xticks to be whenener it is midnight on a given day.
             labels = [datetime.datetime.strptime(x[i], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d %Hh") for i in locs]
@@ -2175,7 +2176,7 @@ def gen_subplots_for_microwave(agg_method = 'mean'):
     plt.subplots_adjust(bottom=0.5)
     plt.tight_layout()
 
-    fig.suptitle("Detection of {} Usage with Data of Varying Granularity ({} aggregation)".format(title, agg_method))
+    fig.suptitle("Detection of {} with Data of Varying Granularity ({} aggregation)".format(title, agg_method))
     fig.text(0.5, 0, 'Time', ha='center')
     fig.text(0, 0.5, 'Power (Watts)', va='center', rotation='vertical')
     print("Generating plots...")   
@@ -2266,7 +2267,7 @@ def demo_two_longer():
     aug_2020 = load_bom_data("data/extra/bom-aug-2020.csv", False)
     min_temps_winter = jun_2020 + jul_2020 + aug_2020
 
-    household = 'hfs01a'
+    household = 'uq49'
     circuit = 'Aircon1'
     winter_months_start = ['2020-06-01T00:00:00Z', '2020-07-01T00:00:00Z', '2020-08-01T00:00:00Z']
     winter_months_end = ['2020-06-30T00:00:00Z', '2020-07-31T00:00:00Z', '2020-08-31T00:00:00Z']
@@ -2314,7 +2315,7 @@ def demo_two_longer():
 
 
 def demo_three():
-    gen_subplots_for_microwave('mean')
+    gen_subplots_for_microwave('first')
 
 
 def compare_agg_method():
@@ -2383,7 +2384,10 @@ if __name__ == '__main__':
 
     # demo_one()
     # demo_two()
+    # demo_two_longer()
     demo_three()
     # compare_agg_method()
+    # client = InfluxDBClient(host=HOST, database=DATABASE, username=USERNAME, password=PASSWORD, port=PORT, headers={'Accept': 'application/json'}, gzip=True)
+    # process_outlier_check(client)
 
 # %%
