@@ -421,13 +421,15 @@ def plot_aircon_trend(usage_series: pd.Series, temps: List[int], s_type: str):
     min_temp = min(temps)
     max_temp = max(temps)
 
-    ax2.set_ylabel("Power W")
-    ax.set_ylabel("Degree's C")
+    ax2.set_ylabel("Power Wh")
+    ax.set_ylabel("Degrees C")
     ax.set_ylim([min_temp-2,max_temp+2])
 
     ax.set_xlabel("Date")
     ax.set_xticks(x_ticks)
     ax.set_xticklabels(x_ticklabels, rotation=60)
+
+    plt.subplots_adjust(bottom=0.2)
     
     plt.title(s_type + " Temperature vs. Aircon Usage")
     plt.show()
@@ -456,13 +458,25 @@ def get_probabilities(temps: List[int], usage_series: pd.Series):
     
     # Bayes' Theorem
     for i in range(min_temp, max_temp+1):
+        
+        # P(A) = Prob that the aircon is used
         p_a = usage_series.gt(0).sum() / num_days
+
+        # P(B) = Prob that the temperature == i
         p_b = td.eq(i).sum() / num_days
+
+        # P(A or B)
         p_a_or_b = (n['vals'].gt(0) | n['temps'].eq(i)).sum() / num_days
+
+        # P(A and B)
         p_a_and_b = p_a + p_b - p_a_or_b
+
+        # P(B) != 0
         if (p_b == 0):
             probs.append(np.nan)
             continue
+
+        # P(A|B)
         p_a_given_b = p_a_and_b / p_b
         probs.append(round(p_a_given_b,2))
     
@@ -535,7 +549,7 @@ def plot_probs_combined(min_temps_winter: List[int], usage_series_winter: pd.Ser
     ax = plt.gca()
     ax.set_ylim([0.0,1.0])
 
-    plt.xlabel("Temperature (C)")
+    plt.xlabel("Temperature (Degrees C)")
     plt.ylabel("Probability of Aircon Use")
     plt.title("Probability Curve of Aircon Usage vs Temperature")
     plt.show()
@@ -2122,18 +2136,79 @@ def gen_subplots_for_event():
     plt.show()
 
 
-def gen_subplots_for_microwave(agg_method = 'mean'):
+def gen_subplots_for_sleep_disturbances(agg_method = 'mean'):
     granularities = [1/6, 1, 5, 30]
-    granularities_str = ["10sec", "1min", "5min", "30mins"]
+    granularities_str = ["5sec", "1min", "5min", "30mins"]
     title = "Sleep Disturbances"
     household = 'uq10'
     circuit = 'Lights1'
-    start = '2020-09-04T00:00:00Z'
-    end = '2020-09-08T00:00:00Z'
+    start = '2021-07-25T00:00:00Z'
+    end = '2021-07-28T00:00:00Z'
     min_power = 0
-    max_power = 1000
+    max_power = 100
     min_duration = 0
     max_duration = 30
+    off_requirement = 10
+    short = True
+
+    client = InfluxDBClient(host=HOST, database=DATABASE, username=USERNAME, password=PASSWORD, port=PORT, headers={'Accept': 'application/json'}, gzip=True)
+    dataframes = get_data_in_period(client, "'{}'".format(start), "'{}'".format(end), "'{}'".format(household), "'{}'".format(circuit))
+    fig, axs = plt.subplots(len(granularities), figsize=(14, 8), sharey=True, tight_layout=True)
+
+    for i in range(len(granularities)):
+        print("Processing plot for granularity: {}".format(granularities_str[i]))
+        processed = pre_process(dataframes, granularities[i], agg_method)
+        for df in processed:
+            peaks = get_peaks(df, min_power, max_power, min_duration, max_duration, off_requirement, granularities[i], short)
+
+            peaks_dates = [i[0] for i in peaks if int(i[0][11:13]) < 4 or (int(i[0][11:13]) < 25 and int(i[0][11:13]) >= 22)]
+            peaks_values = [i[1] for i in peaks if int(i[0][11:13]) < 4 or (int(i[0][11:13]) < 25 and int(i[0][11:13]) >= 22)]
+
+            x = [i for i in df.index.tolist()]
+            y = [i for i in df.values.tolist()]
+
+            # axs[i].axhline(y=max_power, color='c', linestyle='--', label="Upper bound")
+            # axs[i].axhline(y=min_power, color='g', linestyle='--', label="Lower bound")
+
+            locs = list(range(0, len(x), round(len(x)/5))) # Maybe just set the xticks to be whenener it is midnight on a given day.
+            labels = [datetime.datetime.strptime(x[i], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d %Hh") for i in locs]
+            plt.sca(axs[i])
+            plt.xticks(locs, labels)
+
+            axs[i].plot(x, y, label="Circuit Data", zorder=1)
+            axs[i].scatter(peaks_dates, peaks_values, c="r", marker='x', label="Peaks Detected", zorder=2)
+            axs[i].text(0.5, 1.03, "{}".format(granularities_str[i]), transform=axs[i].transAxes, ha="center")
+
+            # axs[i].legend(loc=1)
+            axs[i].text(0.1, 0.75, "{} peaks".format(len(peaks_dates)), transform=axs[i].transAxes)
+
+            axs[i].margins(x=0)
+
+    axs[len(axs)-1].legend(loc=1)
+    for i in range(len(axs)-1):
+        axs[i].set_xticks([])
+    plt.subplots_adjust(wspace=0, hspace=0)
+    plt.subplots_adjust(bottom=0.5)
+    plt.tight_layout()
+
+    fig.suptitle("Detection of {} with Data of Varying Granularity ({} aggregation)".format(title, agg_method))
+    fig.text(0.5, 0, 'Time', ha='center')
+    fig.text(0, 0.5, 'Power (Watts)', va='center', rotation='vertical')
+    print("Generating plots...")   
+    plt.show()
+
+def gen_subplots_for_aircon(agg_method = 'mean'):
+    granularities = [1/12, 1, 5, 30]
+    granularities_str = ["5sec", "1min", "5min", "30mins"]
+    title = "Aircon Usages"
+    household = 'hfs01a'
+    circuit = 'Aircon1'
+    start = '2021-09-08T00:00:00Z'
+    end = '2021-09-11T00:00:00Z'
+    min_power = 0
+    max_power = 10000
+    min_duration = 0
+    max_duration = 500
     off_requirement = 60
     short = True
 
@@ -2182,7 +2257,67 @@ def gen_subplots_for_microwave(agg_method = 'mean'):
     print("Generating plots...")   
     plt.show()
 
+def gen_subplots_for_microwave(agg_method = 'mean'):
+    granularities = [1/12, 1, 5, 30]
+    granularities_str = ["5sec", "1min", "5min", "30mins"]
+    title = "Microwave Usages"
+    household = 'hfs01a'
+    circuit = 'Power1'
+    start = '2021-09-08T00:00:00Z'
+    end = '2021-09-11T00:00:00Z'
+    min_power = 600
+    max_power = 1200
+    min_duration = 0
+    max_duration = 10
+    off_requirement = 0
+    short = False
 
+    client = InfluxDBClient(host=HOST, database=DATABASE, username=USERNAME, password=PASSWORD, port=PORT, headers={'Accept': 'application/json'}, gzip=True)
+    dataframes = get_data_in_period(client, "'{}'".format(start), "'{}'".format(end), "'{}'".format(household), "'{}'".format(circuit))
+    fig, axs = plt.subplots(len(granularities), figsize=(14, 8), sharey=True, tight_layout=True)
+
+    for i in range(len(granularities)):
+        print("Processing plot for granularity: {}".format(granularities_str[i]))
+        processed = pre_process(dataframes, granularities[i], agg_method)
+        for df in processed:
+            peaks = get_peaks(df, min_power, max_power, min_duration, max_duration, off_requirement, granularities[i], short)
+            peaks_dates = [i[0] for i in peaks]
+            peaks_values = [i[1] for i in peaks]
+
+            x = [i for i in df.index.tolist()]
+            y = [i for i in df.values.tolist()]
+
+            axs[i].axhline(y=max_power, color='c', linestyle='--', label="Upper bound")
+            axs[i].axhline(y=min_power, color='g', linestyle='--', label="Lower bound")
+
+            locs = list(range(0, len(x), round(len(x)/5))) # Maybe just set the xticks to be whenener it is midnight on a given day.
+            labels = [datetime.datetime.strptime(x[i], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d %Hh") for i in locs]
+            plt.sca(axs[i])
+            plt.xticks(locs, labels)
+
+            axs[i].plot(x, y, label="Circuit Data", zorder=1)
+            axs[i].scatter(peaks_dates, peaks_values, c="r", marker='x', label="Peaks Detected", zorder=2)
+            axs[i].text(0.5, 1.03, "{}".format(granularities_str[i]), transform=axs[i].transAxes, ha="center")
+
+            # axs[i].legend(loc=1)
+            axs[i].text(0.1, 0.75, "{} peaks".format(len(peaks)), transform=axs[i].transAxes)
+
+            axs[i].margins(x=0)
+
+    axs[len(axs)-1].legend(loc=1) # top right corner of the last subplot 
+    for i in range(len(axs)-1):
+        axs[i].set_xticks([])
+    plt.subplots_adjust(wspace=0, hspace=0)
+    plt.subplots_adjust(bottom=0.5)
+    plt.tight_layout()
+
+    fig.suptitle("Detection of {} with Data of Varying Granularity ({} aggregation)".format(title, agg_method))
+    fig.text(0.5, 0, 'Time', ha='center')
+    fig.text(0, 0.5, 'Power (Watts)', va='center', rotation='vertical')
+    print("Generating plots...")   
+    plt.show()
+
+# An example of getting some data from the db and finding the number of sleep disturbances.
 def demo_one():
     household = 'uq10'
     circuit = 'Lights1'
@@ -2203,6 +2338,7 @@ def demo_one():
     # Then, we can normalise against other households etc...
 
 
+# An example of using weather data from the BOM and correlating it to aircon usage.
 def demo_two():
     jan_2021 = load_bom_data("data/extra/bom-jan-2021.csv", True)
     max_temps_summer = jan_2021
@@ -2256,6 +2392,7 @@ def demo_two():
     plot_probs_combined(min_temps_winter, usage_series_winter, max_temps_summer, usage_series_summer)
 
 
+# Same as above but for a longer duration
 def demo_two_longer():
     dec_2020 = load_bom_data("data/extra/bom-dec-2020.csv", True)
     jan_2021 = load_bom_data("data/extra/bom-jan-2021.csv", True)
@@ -2267,7 +2404,7 @@ def demo_two_longer():
     aug_2020 = load_bom_data("data/extra/bom-aug-2020.csv", False)
     min_temps_winter = jun_2020 + jul_2020 + aug_2020
 
-    household = 'uq49'
+    household = 'hfs01a'
     circuit = 'Aircon1'
     winter_months_start = ['2020-06-01T00:00:00Z', '2020-07-01T00:00:00Z', '2020-08-01T00:00:00Z']
     winter_months_end = ['2020-06-30T00:00:00Z', '2020-07-31T00:00:00Z', '2020-08-31T00:00:00Z']
@@ -2313,11 +2450,7 @@ def demo_two_longer():
     plot_probs_combined(min_temps_winter, usage_series_winter, max_temps_summer, usage_series_summer)
 
 
-
-def demo_three():
-    gen_subplots_for_microwave('first')
-
-
+# Generates plots for comparing the detectability of events when using different aggregation methods to down sample data.
 def compare_agg_method():
     methods = ['mean', 'max', 'first']
     granularity = 5
@@ -2382,12 +2515,6 @@ def compare_agg_method():
 # Main function
 if __name__ == '__main__':
 
-    # demo_one()
-    # demo_two()
-    # demo_two_longer()
-    demo_three()
-    # compare_agg_method()
-    # client = InfluxDBClient(host=HOST, database=DATABASE, username=USERNAME, password=PASSWORD, port=PORT, headers={'Accept': 'application/json'}, gzip=True)
-    # process_outlier_check(client)
+    # Run your code here
 
 # %%
